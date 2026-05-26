@@ -1,23 +1,39 @@
 # Agentic SDLC Office
 
-A visual, agent-driven model of the software development lifecycle — rendered as a working office where AI agents handle intent capture, generation, validation, governance, deployment, and observation.
+A visual operating model for the Agentic Development Lifecycle (ADLC). An office of 8 specialist agents executes work concurrently across Intent / Generate / Validate / Govern / Deploy / Observe modes; a human governs from a Decision Inbox.
 
 ## Status
 
-`v0.1` — visual workflow prototype. See [docs/product/roadmap.md](docs/product/roadmap.md).
+`v0.1` — Mock Visual Workflow Prototype. See [docs/product/mvp-scope.md](docs/product/mvp-scope.md) for the definition of done.
 
 ## How this repo is organized
 
-- **Issues** track work (features, bugs, decisions, research, assets).
-- **Project board** (`Agentic SDLC Office — v0.1 Build Board`) tracks state.
-- **`/docs`** holds stable knowledge — product scope, design bibles, architecture, governance.
-- **PRs** track implementation and close issues via `Closes #N`.
+- **Docs** hold stable knowledge — under `/docs`.
+- **Prompts** hold agent system prompts — under `/prompts`.
+- **Source code** under `/src` (TypeScript-first data model).
+- **Visual assets** under `/assets` (source under `/assets/source`, exports under `/assets/exported`).
+- **Issues** track work; **Project board** tracks state; **PRs** track implementation.
 
 ## Quick links
 
-- Product hub: [docs/product/project-hub.md](docs/product/project-hub.md)
+- Project brief: [docs/product/project-brief.md](docs/product/project-brief.md)
+- ADLC model: [docs/product/adlc-model.md](docs/product/adlc-model.md)
 - MVP scope: [docs/product/mvp-scope.md](docs/product/mvp-scope.md)
-- Roadmap: [docs/product/roadmap.md](docs/product/roadmap.md)
+- Now / Next / Later / Never: [docs/product/now-next-later-never.md](docs/product/now-next-later-never.md)
+- Agent roles: [docs/agents/role-catalog.md](docs/agents/role-catalog.md)
+- Office rooms: [docs/design/office-room-system.md](docs/design/office-room-system.md)
 - Decision log: [docs/governance/decision-log.md](docs/governance/decision-log.md)
-- Agent role catalog: [docs/agents/role-catalog.md](docs/agents/role-catalog.md)
-- Art direction: [docs/design/art-direction.md](docs/design/art-direction.md)
+- Demo script: [docs/portfolio/demo-script.md](docs/portfolio/demo-script.md)
+
+## The agents (v0.1)
+
+| Agent | Role | Primary room |
+| --- | --- | --- |
+| Cora | Delivery Lead / Orchestrator | Human Office |
+| Piper | Product Strategist | Product / Research |
+| Nova | Researcher | Product / Research |
+| Theo | Systems Architect | Architecture / Design |
+| Iris | UI Designer | Architecture / Design |
+| Mira | Builder | Dev Floor |
+| Tess | QA Engineer | QA Lab |
+| Rune | Reviewer / Security | Review / Security |

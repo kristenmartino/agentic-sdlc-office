@@ -1,24 +1,31 @@
-# Demo: REQ-014 Dark Mode
+# Demo: REQ-014 Add Dark Mode
 
-The canonical happy-path scenario. A feature request enters the office and moves through every ADLC mode without incident.
+The canonical happy-path scenario. A feature request enters the office and moves through every specialty without incident.
 
 ## Setup
 
 - Work item: `REQ-014 — Add dark mode to dashboard`
-- Starting state: empty office, agents idle
+- Starting state: empty office, agents idle in their primary rooms
 
-## Beats
+## Beats (handoff sequence)
 
-1. **Intent.** Cora captures the request from a human.
-2. **Refine.** Ava adds acceptance criteria.
-3. **Generate.** Nova produces a draft implementation.
-4. **Validate.** Vale runs checks.
-5. **Govern.** Mira surfaces a decision (e.g. token naming).
-6. **Deploy.** Tess ships behind a flag.
-7. **Observe.** Rune reports first-day metrics.
+1. **Piper** captures intent in Product / Research. Writes acceptance criteria.
+2. **Nova** researches prior art (token systems, accessibility constraints).
+3. **Theo** plans the implementation in Architecture / Design — token naming, dark-token override strategy.
+4. **Iris** designs the dark variants and microcopy for the toggle.
+5. **Mira** builds on the Dev Floor — branch, implementation, PR.
+6. **Tess** validates in the QA Lab — contrast checks, regression on key flows.
+7. **Rune** reviews for security/UX issues in Review / Security.
+8. **Cora** brings the open decision (e.g. naming `--surface-1` vs `--bg-1`) to the Human Office.
+
+## Open decision in this run
+
+`What do we name the dark surface tokens?` — surfaced to Kristen via the Decision Inbox.
 
 ## What we are showing off
 
-- The office *moves* — agents traverse rooms, hand off artifacts.
-- Decisions surface to the human only when needed.
-- Every step is replayable from the event log.
+- Agents move between rooms; handoffs are visible.
+- Decisions surface only when a human is needed.
+- The activity log shows the whole run.
+- The work item drawer shows artifacts, blockers, and quality gates per beat.
+- Replayable from the event stream.

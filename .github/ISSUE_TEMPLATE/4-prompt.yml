@@ -1,7 +1,7 @@
 name: Prompt Update
 description: A change to an agent's system prompt.
-title: "[PROMPT] "
-labels: ["type:task", "area:agents"]
+title: "[Prompt]: "
+labels: ["type:prompt", "area:agents"]
 body:
   - type: dropdown
     id: agent
@@ -9,13 +9,14 @@ body:
       label: Agent
       options:
         - Cora
-        - Ava
+        - Piper
         - Nova
         - Theo
-        - Vale
+        - Iris
         - Mira
         - Tess
         - Rune
+        - Shared base
     validations:
       required: true
   - type: textarea
@@ -29,7 +30,7 @@ body:
     id: change
     attributes:
       label: Proposed change
-      description: Summary of the prompt diff. Final text lives in docs/agents/prompt-pack.md.
+      description: Summary of the prompt diff. Final text lives in /prompts/.
     validations:
       required: true
   - type: textarea
@@ -44,6 +45,6 @@ body:
     attributes:
       label: Definition of done
       options:
-        - label: prompt-pack.md updated
+        - label: Prompt file updated under /prompts/
         - label: Validated against named scenarios
         - label: agent-registry.md updated if behavior changed

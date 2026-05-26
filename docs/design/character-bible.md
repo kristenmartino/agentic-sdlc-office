@@ -2,37 +2,37 @@
 
 Per-agent visual identity. Used for asset prompts and to keep characters consistent across art passes.
 
-## Cora
+## Cora — Delivery Lead
 
 - Silhouette: TODO
 - Color: TODO
 - Signature prop: TODO
-- States: idle / thinking / talking / blocked / celebrating
+- States: idle / thinking / talking / escalating / celebrating
 
-## Ava
-
-TODO
-
-## Nova
+## Piper — Product Strategist
 
 TODO
 
-## Theo
+## Nova — Researcher
 
 TODO
 
-## Vale
+## Theo — Systems Architect
 
 TODO
 
-## Mira
+## Iris — UI Designer
 
 TODO
 
-## Tess
+## Mira — Builder
 
 TODO
 
-## Rune
+## Tess — QA Engineer
+
+TODO
+
+## Rune — Reviewer / Security
 
 TODO
