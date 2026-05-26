@@ -1,0 +1,49 @@
+name: Prompt Update
+description: A change to an agent's system prompt.
+title: "[PROMPT] "
+labels: ["type:task", "area:agents"]
+body:
+  - type: dropdown
+    id: agent
+    attributes:
+      label: Agent
+      options:
+        - Cora
+        - Ava
+        - Nova
+        - Theo
+        - Vale
+        - Mira
+        - Tess
+        - Rune
+    validations:
+      required: true
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Motivation
+      description: What is the agent getting wrong, or what new capability is needed?
+    validations:
+      required: true
+  - type: textarea
+    id: change
+    attributes:
+      label: Proposed change
+      description: Summary of the prompt diff. Final text lives in docs/agents/prompt-pack.md.
+    validations:
+      required: true
+  - type: textarea
+    id: validation
+    attributes:
+      label: How we'll know it worked
+      description: Concrete tests or scenarios.
+    validations:
+      required: true
+  - type: checkboxes
+    id: dod
+    attributes:
+      label: Definition of done
+      options:
+        - label: prompt-pack.md updated
+        - label: Validated against named scenarios
+        - label: agent-registry.md updated if behavior changed

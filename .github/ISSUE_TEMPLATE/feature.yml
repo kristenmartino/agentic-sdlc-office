@@ -1,0 +1,79 @@
+name: Feature / Story
+description: A user-facing feature or capability to build.
+title: "[FEATURE] "
+labels: ["type:feature"]
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What are we building?
+    validations:
+      required: true
+  - type: textarea
+    id: value
+    attributes:
+      label: User value
+      description: Why does this matter?
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: What is included?
+    validations:
+      required: true
+  - type: textarea
+    id: out_of_scope
+    attributes:
+      label: Out of scope
+      description: What should explicitly NOT be included?
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Concrete checks. Each item is a checkbox.
+      value: |
+        - [ ]
+        - [ ]
+        - [ ]
+    validations:
+      required: true
+  - type: dropdown
+    id: adlc_mode
+    attributes:
+      label: ADLC mode
+      options:
+        - Intent
+        - Generate
+        - Validate
+        - Govern
+        - Deploy
+        - Observe
+    validations:
+      required: true
+  - type: input
+    id: related_docs
+    attributes:
+      label: Related docs
+      description: Paths under /docs that are most relevant.
+  - type: input
+    id: related_design
+    attributes:
+      label: Related design
+      description: Figma/Adobe links.
+  - type: textarea
+    id: risks
+    attributes:
+      label: Risks / open questions
+  - type: checkboxes
+    id: dod
+    attributes:
+      label: Definition of done
+      options:
+        - label: Implementation complete
+        - label: Acceptance criteria met
+        - label: Tests/checks passed
+        - label: Docs updated
+        - label: Reviewed

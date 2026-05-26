@@ -1,0 +1,36 @@
+name: Research
+description: A scoped investigation. Outputs are notes, not implementation.
+title: "[RESEARCH] "
+labels: ["type:research"]
+body:
+  - type: textarea
+    id: question
+    attributes:
+      label: Research question
+      description: What are we trying to learn?
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why now
+      description: What decision or work depends on this?
+    validations:
+      required: true
+  - type: textarea
+    id: approach
+    attributes:
+      label: Approach
+      description: Sources, prototypes, experiments.
+  - type: textarea
+    id: deliverable
+    attributes:
+      label: Deliverable
+      description: Where do findings live? (e.g. a doc in /docs)
+    validations:
+      required: true
+  - type: input
+    id: timebox
+    attributes:
+      label: Timebox
+      description: e.g. "1 day", "4 hours". Stop and ask if you exceed it.

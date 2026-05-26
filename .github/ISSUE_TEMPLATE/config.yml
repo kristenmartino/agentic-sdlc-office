@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Discussions
+    url: https://github.com/kristenmartino/agentic-sdlc-office/discussions
+    about: For open-ended questions and ideas (use a Decision issue if a choice needs to be made).

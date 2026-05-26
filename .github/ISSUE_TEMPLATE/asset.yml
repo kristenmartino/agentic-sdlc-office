@@ -1,0 +1,65 @@
+name: Design Asset
+description: A visual asset (character state, room, overlay, animation).
+title: "[ASSET] "
+labels: ["type:asset", "area:design"]
+body:
+  - type: input
+    id: name
+    attributes:
+      label: Asset name
+      description: e.g. "Cora idle state"
+    validations:
+      required: true
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Asset type
+      options:
+        - Agent
+        - Room
+        - Overlay
+        - Panel
+        - Animation
+    validations:
+      required: true
+  - type: dropdown
+    id: target_version
+    attributes:
+      label: Needed for
+      options:
+        - v0.1
+        - v0.2
+        - v0.3
+        - v1.0
+        - Later
+    validations:
+      required: true
+  - type: textarea
+    id: visual_requirements
+    attributes:
+      label: Visual requirements
+  - type: textarea
+    id: source_prompt
+    attributes:
+      label: Source prompt
+      description: Paste the image-generation prompt here if applicable.
+  - type: input
+    id: source_file
+    attributes:
+      label: Source file
+      description: Figma/Adobe link.
+  - type: input
+    id: export_file
+    attributes:
+      label: Export file
+      description: Path in repo or asset folder.
+  - type: checkboxes
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      options:
+        - label: Matches art direction
+        - label: Consistent perspective
+        - label: Readable at small size
+        - label: Exported correctly
+        - label: Added to asset registry

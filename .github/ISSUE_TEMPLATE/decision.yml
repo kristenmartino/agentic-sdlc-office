@@ -1,0 +1,62 @@
+name: Decision
+description: A choice that needs to be made. Outcome lands in the decision log.
+title: "[DECISION] "
+labels: ["type:decision", "needs-decision"]
+body:
+  - type: textarea
+    id: question
+    attributes:
+      label: Decision needed
+      description: What are we deciding?
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: Why does this matter now?
+    validations:
+      required: true
+  - type: textarea
+    id: options
+    attributes:
+      label: Options
+      value: |
+        ### Option A
+        Pros:
+        Cons:
+
+        ### Option B
+        Pros:
+        Cons:
+
+        ### Option C
+        Pros:
+        Cons:
+    validations:
+      required: true
+  - type: textarea
+    id: recommendation
+    attributes:
+      label: Recommendation
+      description: Which option is recommended and why?
+  - type: textarea
+    id: impact
+    attributes:
+      label: Impact if unresolved
+      description: What happens if we do not decide?
+  - type: dropdown
+    id: reversible
+    attributes:
+      label: Reversible?
+      options:
+        - Yes
+        - Partially
+        - "No"
+    validations:
+      required: true
+  - type: textarea
+    id: final
+    attributes:
+      label: Final decision
+      description: Fill in once decided. Then add a row to docs/governance/decision-log.md.
