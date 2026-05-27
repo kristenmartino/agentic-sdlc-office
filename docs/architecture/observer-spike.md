@@ -54,6 +54,14 @@ that actually matter:
    `DecisionInbox` component switches to a read-only surface when
    `source === "observed"`. Defence in depth — the data layer can't smuggle
    a resolve-eligible decision past the UI even by mistake.
+5. **What about malformed external fixtures?**
+   The validator now also checks `scenario.initialWorkItem` field-by-field
+   (id, title, kind, status, currentMode, ownerAgentId, nextAgentId,
+   assignedAgentIds, createdAt, updatedAt) and rejects any event whose
+   `type` falls outside the 12-category taxonomy. For scripted scenarios
+   these checks are no-ops; for observed scenarios (which load from JSON)
+   they catch the kind of drift TypeScript can't see across an import
+   boundary.
 
 ## Contract for the v0.2 parser
 
