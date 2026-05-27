@@ -253,23 +253,30 @@ export function validateScenario(scenario: Scenario): ValidationIssue[] {
 type IssuePusher = (eventId: string, eventIndex: number, message: string) => void;
 
 /**
- * Validate `scenario.initialWorkItem` against the WorkItem type's runtime
- * unions. Mostly a no-op for our scripted scenarios — they're hand-rolled
- * TS objects so values can only drift via deliberate refactor. The check
- * matters most for observed scenarios where the work item is loaded from
- * external JSON: TypeScript types only verify the shape of the import, not
- * the values inside it.
+ * Validate every field on `scenario.initialWorkItem` against the WorkItem
+ * type's runtime contract. Mostly a no-op for hand-rolled scripted scenarios;
+ * matters for observed scenarios loaded from JSON, where TS only verifies
+ * the import shape and the values inside are trusted by default.
  *
- * Field reasoning:
+ * Coverage rationale (every field on `WorkItem` is checked here — if you add
+ * a new field to the type, add a check below):
  *
- * - `id`, `title` — required non-empty strings; the UI shows them and they
- *   anchor every artifact / decision back to the work item.
- * - `kind`, `status`, `currentMode` — discriminated unions; anything outside
- *   the type's allowed values would break the reducer or the UI.
- * - `ownerAgentId`, `nextAgentId`, `assignedAgentIds[]` — agent IDs must be
- *   real or `agents.find()` will return undefined and the UI will crash.
- * - `createdAt`, `updatedAt` — ISO 8601 UTC. The activity log sorts and
- *   formats from these.
+ * - String identity: `id`, `title` non-empty; `currentPhase` non-empty.
+ * - Discriminated unions: `kind`, `status`, `currentMode` must be in their
+ *   respective union sets, or the reducer/UI would break.
+ * - Agent references: `ownerAgentId`, `nextAgentId`, `assignedAgentIds[]`
+ *   must point at a real agent or `agents.find()` returns undefined.
+ * - Boolean: `humanDecisionNeeded` must actually be a boolean — JSON could
+ *   smuggle a string and the UI would happily treat any truthy value as true.
+ * - Nullable strings: `branch`, `worktreePath` are `string | null`. Anything
+ *   else is a fixture bug.
+ * - ID arrays: `artifactIds`, `decisionIds`, `blockerIds`, `qualityGateIds`
+ *   must be arrays of strings — the reducer's `.includes()` checks crash on
+ *   non-array values.
+ * - Free-text arrays: `acceptance`, `outOfScope` must be arrays of strings.
+ * - `modeHistory[]` — each entry needs a valid `ts`, `to`, `by`, and a
+ *   `from` that's either null or a known mode.
+ * - Timestamps: `createdAt`, `updatedAt` must parse as ISO 8601.
  */
 function validateInitialWorkItem(wi: WorkItem, push: IssuePusher): void {
   if (typeof wi.id !== "string" || wi.id.length === 0) {
@@ -277,6 +284,9 @@ function validateInitialWorkItem(wi: WorkItem, push: IssuePusher): void {
   }
   if (typeof wi.title !== "string" || wi.title.length === 0) {
     push("n/a", -1, "initialWorkItem.title must be a non-empty string");
+  }
+  if (typeof wi.currentPhase !== "string" || wi.currentPhase.length === 0) {
+    push("n/a", -1, "initialWorkItem.currentPhase must be a non-empty string");
   }
 
   if (!VALID_WORK_ITEM_KINDS.has(wi.kind)) {
@@ -306,10 +316,71 @@ function validateInitialWorkItem(wi: WorkItem, push: IssuePusher): void {
     });
   }
 
+  if (typeof wi.humanDecisionNeeded !== "boolean") {
+    push("n/a", -1, `initialWorkItem.humanDecisionNeeded must be boolean (got ${typeof wi.humanDecisionNeeded})`);
+  }
+
+  if (wi.branch !== null && typeof wi.branch !== "string") {
+    push("n/a", -1, `initialWorkItem.branch must be string | null (got ${typeof wi.branch})`);
+  }
+  if (wi.worktreePath !== null && typeof wi.worktreePath !== "string") {
+    push("n/a", -1, `initialWorkItem.worktreePath must be string | null (got ${typeof wi.worktreePath})`);
+  }
+
+  validateStringArray("artifactIds", wi.artifactIds, push);
+  validateStringArray("decisionIds", wi.decisionIds, push);
+  validateStringArray("blockerIds", wi.blockerIds, push);
+  validateStringArray("qualityGateIds", wi.qualityGateIds, push);
+  validateStringArray("acceptance", wi.acceptance, push);
+  validateStringArray("outOfScope", wi.outOfScope, push);
+
+  if (!Array.isArray(wi.modeHistory)) {
+    push("n/a", -1, "initialWorkItem.modeHistory must be an array");
+  } else {
+    wi.modeHistory.forEach((change, idx) => validateModeChange(change, idx, push));
+  }
+
   if (!isIsoTimestamp(wi.createdAt)) {
     push("n/a", -1, `initialWorkItem.createdAt: not a valid ISO 8601 timestamp ('${wi.createdAt}')`);
   }
   if (!isIsoTimestamp(wi.updatedAt)) {
     push("n/a", -1, `initialWorkItem.updatedAt: not a valid ISO 8601 timestamp ('${wi.updatedAt}')`);
+  }
+}
+
+function validateStringArray(field: string, value: unknown, push: IssuePusher): void {
+  if (!Array.isArray(value)) {
+    push("n/a", -1, `initialWorkItem.${field} must be an array`);
+    return;
+  }
+  value.forEach((entry, idx) => {
+    if (typeof entry !== "string") {
+      push("n/a", -1, `initialWorkItem.${field}[${idx}] must be a string (got ${typeof entry})`);
+    }
+  });
+}
+
+function validateModeChange(change: unknown, idx: number, push: IssuePusher): void {
+  if (change === null || typeof change !== "object") {
+    push("n/a", -1, `initialWorkItem.modeHistory[${idx}] must be an object`);
+    return;
+  }
+  const c = change as Partial<{
+    ts: unknown;
+    from: unknown;
+    to: unknown;
+    by: unknown;
+  }>;
+  if (!isIsoTimestamp(c.ts)) {
+    push("n/a", -1, `initialWorkItem.modeHistory[${idx}].ts: not a valid ISO 8601 timestamp ('${String(c.ts)}')`);
+  }
+  if (c.from !== null && !VALID_MODES.has(c.from as ADLCMode)) {
+    push("n/a", -1, `initialWorkItem.modeHistory[${idx}].from: unknown mode '${String(c.from)}'`);
+  }
+  if (!VALID_MODES.has(c.to as ADLCMode)) {
+    push("n/a", -1, `initialWorkItem.modeHistory[${idx}].to: unknown mode '${String(c.to)}'`);
+  }
+  if (!VALID_AGENTS.has(c.by as AgentId)) {
+    push("n/a", -1, `initialWorkItem.modeHistory[${idx}].by: unknown agent '${String(c.by)}'`);
   }
 }
