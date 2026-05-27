@@ -1,35 +1,46 @@
+import type { AgentId } from "../types/agents";
 import type { WorkflowEvent } from "../types/workflow-events";
 import type { WorkItem } from "../types/work-items";
+import type { ParsedClaudeCodeSession } from "../lib/claude-code-parser";
+import { sessionFromFixture } from "../lib/claude-code-parser";
 import observedJson from "./observed-sample.json";
 
 /**
  * v0.2 PREVIEW — sample 'observed' session.
  *
- * The shape of `observed-sample.json` is what a Claude Code log parser will
- * eventually produce. For v0.1 it is hand-authored so the office can render
- * an end-to-end observed run without any parser wiring yet.
+ * The JSON file at `observed-sample.json` is exactly the shape the real
+ * Claude Code parser will eventually return — `origin`, `workItem`, `chain`,
+ * and `events`. For v0.1 we hand-author it so the office can render an
+ * end-to-end observed run without any parser wiring yet.
  *
- * Read-only by contract: no decisions, no approvals, single-agent chain.
- * If you add events that need human input, the observer mode UI will hide
- * the resolve controls — that's the read-only guardrail, not a bug.
+ * Going through `sessionFromFixture` is deliberate: it routes fixture-driven
+ * code through the same function the real parser output will go through,
+ * and the deep-clone guarantees downstream mutation can't corrupt the
+ * imported JSON.
+ *
+ * Read-only by contract: no decisions, no approvals. If events that need
+ * human input get added, the validator will reject them. That's the
+ * read-only guardrail, not a bug.
  */
 
 interface ObservedSessionFile {
-  origin: {
-    source: string;
-    sessionId: string;
-    capturedAt: string;
-    note?: string;
-  };
+  origin: ParsedClaudeCodeSession["origin"];
   workItem: WorkItem;
-  chain: string[];
+  chain: AgentId[];
   events: WorkflowEvent[];
 }
 
 const file = observedJson as unknown as ObservedSessionFile;
+const session: ParsedClaudeCodeSession = sessionFromFixture({
+  origin: file.origin,
+  workItem: file.workItem,
+  chain: file.chain,
+  events: file.events,
+});
 
-export const OBSERVED_SAMPLE_ID = file.workItem.id;
-export const OBSERVED_SAMPLE_INITIAL: WorkItem = structuredClone(file.workItem);
-export const OBSERVED_SAMPLE_EVENTS: WorkflowEvent[] = structuredClone(file.events);
-export const OBSERVED_SAMPLE_CHAIN = structuredClone(file.chain);
-export const OBSERVED_SAMPLE_ORIGIN = structuredClone(file.origin);
+export const OBSERVED_SAMPLE_ID = session.workItem.id;
+export const OBSERVED_SAMPLE_INITIAL: WorkItem = session.workItem;
+export const OBSERVED_SAMPLE_EVENTS: WorkflowEvent[] = session.events;
+export const OBSERVED_SAMPLE_CHAIN: AgentId[] = session.chain;
+export const OBSERVED_SAMPLE_ORIGIN = session.origin;
+export const OBSERVED_SAMPLE_SESSION: ParsedClaudeCodeSession = session;

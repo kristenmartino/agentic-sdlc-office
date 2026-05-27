@@ -30,8 +30,9 @@ export default function DecisionInbox() {
           <span className="text-[10px] font-mono text-office-muted">observer</span>
         </header>
         <p className="text-xs text-office-muted italic leading-snug">
-          Observed sessions are read-only. Decisions surface in the activity log but are
-          not resolved from the office — the original Claude Code session owns the human-in-the-loop.
+          Observed sessions are read-only. This scenario does not surface office-owned
+          decisions or approvals. If the original Claude Code session involved human input,
+          it appears as informational activity in the log, not as a Decision Inbox item.
         </p>
       </section>
     );
