@@ -14,8 +14,8 @@ Claude Code persists each session as a JSONL file under:
 ```
 
 - `<encoded-cwd>` is the working directory of the session with separators
-  replaced (e.g. `/Users/rootk/agentic-sdlc-office` →
-  `-Users-rootk-agentic-sdlc-office`).
+  replaced (e.g. `/Users/<you>/agentic-sdlc-office` →
+  `-Users--you--agentic-sdlc-office`).
 - `<session-uuid>` is a stable identifier shared by every line in the file.
 - One JSON object per line. A trailing newline is normal.
 
@@ -82,7 +82,7 @@ An assistant line contains one or more content blocks:
 
 - `text` — natural-language output from Claude
 - `tool_use` — a tool the model wants to invoke
-- `thinking` — extended reasoning blocks (present when thinking is enabled)
+- `thinking` — extended reasoning blocks (present when thinking is enabled). Treated as internal reasoning; the office does not render these to users.
 
 ```jsonc
 {
@@ -106,7 +106,7 @@ Mapping to office events (v0.2 work):
 | `tool_use` (Edit/Write/MultiEdit) | `artifact.produced` (kind = `code_pr`) |
 | `tool_use` (Bash with run) | `agent.message.sent` with the command summary |
 | `tool_use` (Read/Glob/Grep) | log-only / informational |
-| `thinking` | log-only / informational |
+| `thinking` | **ignored / redacted by default.** The office never displays raw thinking content in the UI. If a future feature needs to surface rationale, generate a short summary separately — never pass raw `thinking.text` through to a rendered surface. |
 | anything else | log-only / informational |
 
 The exact mapping rules and the office-agent assignment are deferred to v0.2.
@@ -147,11 +147,16 @@ A few things the office model wants live outside the transcript:
   the user explicitly points at. No directory scanning, no auto-discovery.
 - Nothing observed is exfiltrated. Observed mode is read-only by validator
   contract; the parser is read-only by design.
+- **`thinking` blocks never reach the UI.** Raw model reasoning is internal
+  state, not something to render. The mapper drops `thinking` blocks; if a
+  future feature needs to surface rationale, it generates a short summary
+  separately rather than passing `thinking.text` through to a rendered surface.
 
 ## Status
 
 - ✅ Format documented above.
 - ✅ Raw-line parser at [`parseRawTranscript()`](../../src/lib/claude-code-transcript.ts) — JSONL → typed lines. Defensive against unknown fields.
 - ✅ Synthetic fixture covering one tool-using session.
+- ✅ Strict shape validator at [`validateRawTranscript()`](../../src/lib/claude-code-transcript.ts) — catches unknown `type`, wrong `message.role`, unknown content block kinds, malformed `tool_use`/`tool_result`, non-ISO timestamps. Returns issues, doesn't throw. The mapper should refuse to run on a session with issues.
 - ⏳ Mapping from raw lines to `WorkflowEvent[]` — still in [`claude-code-parser.ts`](../../src/lib/claude-code-parser.ts) as `parseClaudeCodeTranscript`, which still throws. Next PR's scope.
 - ⏳ App-level wiring (a "Load session from disk" affordance). Not started.
