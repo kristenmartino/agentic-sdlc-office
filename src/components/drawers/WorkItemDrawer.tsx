@@ -7,10 +7,16 @@ export default function WorkItemDrawer() {
   const open = useOfficeStore((s) => s.workItemDrawerOpen);
   const close = useOfficeStore((s) => s.closeWorkItemDrawer);
   const workItem = useOfficeStore((s) => s.workItem);
-  const artifacts = useOfficeStore((s) => s.artifacts);
-  const blockers = useOfficeStore((s) => s.blockers);
-  const decisions = useOfficeStore((s) => s.decisions);
-  const gates = useOfficeStore((s) => s.qualityGates);
+  const allArtifacts = useOfficeStore((s) => s.artifacts);
+  const allBlockers = useOfficeStore((s) => s.blockers);
+  const allDecisions = useOfficeStore((s) => s.decisions);
+  const allGates = useOfficeStore((s) => s.qualityGates);
+
+  // Filter by current work item id — preempts multi-work-item support without changing shape.
+  const artifacts = allArtifacts.filter((a) => a.workItemId === workItem.id);
+  const blockers = allBlockers.filter((b) => b.workItemId === workItem.id);
+  const decisions = allDecisions.filter((d) => d.workItemId === workItem.id);
+  const gates = allGates.filter((g) => g.workItemId === workItem.id);
 
   return (
     <AnimatePresence>

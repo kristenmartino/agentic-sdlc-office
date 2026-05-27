@@ -190,7 +190,7 @@ export const BUG_032_EVENTS: WorkflowEvent[] = [
   { id: eid(), ts: ts(57), actor: "cora",   type: "work_item.mode.changed", subject: BUG_032_ID,
     payload: { workItemId: BUG_032_ID, from: "Validate", to: "Govern" } },
   { id: eid(), ts: ts(58), actor: "cora",   type: "agent.status.changed", subject: "cora",
-    payload: { agentId: "cora", from: "idle", to: "working", message: "Rollout decision needed" } },
+    payload: { agentId: "cora", from: "idle", to: "talking", message: "Rollout decision needed" } },
   { id: eid(), ts: ts(59), actor: "cora",   type: "decision.requested", subject: DECISION_ID,
     payload: { decision: {
       id: DECISION_ID,
@@ -214,7 +214,7 @@ export const BUG_032_EVENTS: WorkflowEvent[] = [
     payload: { blocker: { id: BLOCKER_ID, workItemId: BUG_032_ID, raisedBy: "cora",
       kind: "decision_needed", description: "Rollout direction needs a human." } } },
   { id: eid(), ts: ts(61), actor: "cora",   type: "agent.status.changed", subject: "cora",
-    payload: { agentId: "cora", from: "working", to: "waiting_on_human" } },
+    payload: { agentId: "cora", from: "talking", to: "waiting_on_human" } },
 
   // [PAUSE 1: decision]
   { id: eid(), ts: ts(62), actor: "human",  type: "decision.resolved", subject: DECISION_ID,
@@ -222,7 +222,7 @@ export const BUG_032_EVENTS: WorkflowEvent[] = [
   { id: eid(), ts: ts(63), actor: "system", type: "blocker.cleared", subject: BUG_032_ID,
     payload: { blockerId: BLOCKER_ID, resolution: "Roll forward chosen." } },
   { id: eid(), ts: ts(64), actor: "cora",   type: "agent.status.changed", subject: "cora",
-    payload: { agentId: "cora", from: "waiting_on_human", to: "working", message: "Requesting hotfix deploy" } },
+    payload: { agentId: "cora", from: "waiting_on_human", to: "talking", message: "Requesting hotfix deploy" } },
 
   { id: eid(), ts: ts(65), actor: "cora",   type: "approval.requested", subject: APPROVAL_ID,
     payload: { approval: {
@@ -237,7 +237,7 @@ export const BUG_032_EVENTS: WorkflowEvent[] = [
   { id: eid(), ts: ts(66), actor: "human",  type: "approval.resolved", subject: APPROVAL_ID,
     payload: { approvalId: APPROVAL_ID, granted: true, resolvedBy: "human" } },
   { id: eid(), ts: ts(67), actor: "cora",   type: "agent.status.changed", subject: "cora",
-    payload: { agentId: "cora", from: "working", to: "done" } },
+    payload: { agentId: "cora", from: "talking", to: "done" } },
   { id: eid(), ts: ts(68), actor: "system", type: "work_item.completed", subject: BUG_032_ID,
     payload: { workItemId: BUG_032_ID } },
   { id: eid(), ts: ts(69), actor: "system", type: "run.completed", subject: BUG_032_ID, payload: {} },

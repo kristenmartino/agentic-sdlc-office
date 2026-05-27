@@ -22,13 +22,20 @@ export default function DecisionInbox() {
         {open.map((d) => {
           const isApproval = d.id.startsWith("apr_");
           return (
-            <li key={d.id} className="rounded border border-office-line bg-office-bg/60 p-2.5">
+            <li key={d.id} className={`rounded border bg-office-bg/60 p-2.5 ${isApproval ? "border-red-500/30" : "border-office-line"}`}>
               <div className="flex items-start justify-between gap-2">
                 <p className="text-xs font-medium leading-snug">{d.question}</p>
-                <span className="shrink-0 text-[9px] font-mono px-1.5 py-0.5 rounded bg-office-line text-office-muted">
-                  by {d.raisedBy}
+                <span className={`shrink-0 text-[9px] font-mono px-1.5 py-0.5 rounded ${
+                  isApproval ? "bg-red-500/20 text-red-300" : "bg-office-line text-office-muted"
+                }`}>
+                  {isApproval ? "P7 · sim" : `by ${d.raisedBy}`}
                 </span>
               </div>
+              {isApproval && (
+                <p className="mt-1 text-[10px] text-red-300/80 leading-snug font-medium">
+                  Simulated P7 approval — no real merge or deploy is performed.
+                </p>
+              )}
               {d.context && <p className="mt-1 text-[10px] text-office-muted leading-snug">{d.context}</p>}
               <div className="mt-2 flex flex-col gap-1.5">
                 {d.options.map((opt) => (
