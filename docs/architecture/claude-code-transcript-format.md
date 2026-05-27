@@ -14,8 +14,8 @@ Claude Code persists each session as a JSONL file under:
 ```
 
 - `<encoded-cwd>` is the working directory of the session with separators
-  replaced (e.g. `/Users/<you>/agentic-sdlc-office` →
-  `-Users--you--agentic-sdlc-office`).
+  replaced (e.g. `/Users/example/agentic-sdlc-office` →
+  `-Users-example-agentic-sdlc-office`).
 - `<session-uuid>` is a stable identifier shared by every line in the file.
 - One JSON object per line. A trailing newline is normal.
 
@@ -106,7 +106,7 @@ Mapping to office events (v0.2 work):
 | `tool_use` (Edit/Write/MultiEdit) | `artifact.produced` (kind = `code_pr`) |
 | `tool_use` (Bash with run) | `agent.message.sent` with the command summary |
 | `tool_use` (Read/Glob/Grep) | log-only / informational |
-| `thinking` | **ignored / redacted by default.** The office never displays raw thinking content in the UI. If a future feature needs to surface rationale, generate a short summary separately — never pass raw `thinking.text` through to a rendered surface. |
+| `thinking` | **ignored / redacted by default.** The office never displays raw thinking content in the UI. If a future feature needs to surface rationale, generate a short summary separately — never pass the raw `thinking` field through to a rendered surface. |
 | anything else | log-only / informational |
 
 The exact mapping rules and the office-agent assignment are deferred to v0.2.
@@ -150,7 +150,7 @@ A few things the office model wants live outside the transcript:
 - **`thinking` blocks never reach the UI.** Raw model reasoning is internal
   state, not something to render. The mapper drops `thinking` blocks; if a
   future feature needs to surface rationale, it generates a short summary
-  separately rather than passing `thinking.text` through to a rendered surface.
+  separately rather than passing the raw `thinking` field through to a rendered surface.
 
 ## Status
 
