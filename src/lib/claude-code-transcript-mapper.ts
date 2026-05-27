@@ -17,7 +17,7 @@ import type { Artifact, WorkItem } from "@/types/work-items";
 import type { Blocker, QualityGate } from "@/types/governance";
 import type { WorkflowEvent } from "@/types/workflow-events";
 import type { ParsedClaudeCodeSession } from "./claude-code-parser";
-import { sanitizeForNotes } from "./redact";
+import { safeBashCommandLabel, sanitizeForNotes } from "./redact";
 
 /**
  * Narrowing helpers for the unknown `toolUseResult` sibling field that real
@@ -276,14 +276,18 @@ function mapAssistantToolUse(tu: ToolUseBlock, ctx: MapperContext): void {
   if (tu.name === BASH_TOOL) {
     const command = (tu.input as { command?: string }).command;
     if (isTestCommand(command)) {
-      ctx.setStatus("testing", `Running ${command ?? "command"}`);
+      // Status message uses the generic label too — don't render the raw command.
+      ctx.setStatus("testing", "Running test command");
     }
-    if (command) {
-      ctx.emit("agent.message.sent", DEFAULT_AGENT, DEFAULT_AGENT, {
-        agentId: DEFAULT_AGENT,
-        message: `$ ${sanitizeForNotes(command, { maxLen: 200 })}`,
-      });
-    }
+    // Render a *category* label only — raw Bash arguments can carry API
+    // keys, tokens, env vars, URLs with query strings, branch names,
+    // private paths outside the home prefix, and inline secrets.
+    // sanitizeForNotes can't catch those; safeBashCommandLabel never
+    // exposes the command text in the first place.
+    ctx.emit("agent.message.sent", DEFAULT_AGENT, DEFAULT_AGENT, {
+      agentId: DEFAULT_AGENT,
+      message: safeBashCommandLabel(command),
+    });
     return;
   }
 
@@ -294,13 +298,13 @@ function mapAssistantToolUse(tu: ToolUseBlock, ctx: MapperContext): void {
   // and AskUserQuestion can carry queries, prompts, page content, etc.
 
   // MCP tools — naming convention is `mcp__<server>__<tool>`.
-  // Treat as a single category to avoid noise; v0.3 can split per server.
+  // Server names can carry client/project details ("acme-internal", etc.),
+  // so the message stays generic. v0.3 can add an allow-list of
+  // well-known public servers if richer labels become useful.
   if (tu.name.startsWith("mcp__")) {
-    const parts = tu.name.split("__");
-    const server = parts[1] ?? "unknown";
     ctx.emit("agent.message.sent", DEFAULT_AGENT, DEFAULT_AGENT, {
       agentId: DEFAULT_AGENT,
-      message: `MCP action via ${server}`,
+      message: "MCP action observed",
     });
     return;
   }

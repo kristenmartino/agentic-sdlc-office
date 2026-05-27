@@ -111,7 +111,7 @@ Mapping to office events (as of PR #24 / v0.2):
 | `text` | assistant turn | `agent.message.sent` (actor = the office agent representing this session) |
 | `tool_use` (Read/Glob/Grep) | assistant turn | `agent.status.changed → reading` |
 | `tool_use` (Edit/Write/MultiEdit) | assistant turn | `agent.status.changed → coding`; **artifact emitted on the matching tool_result**, using `toolUseResult.filePath` as the ref when available |
-| `tool_use` (Bash with run) | assistant turn | `agent.message.sent` with `$ <command>`; status → `testing` if the command matches test/build/typecheck patterns |
+| `tool_use` (Bash with run) | assistant turn | `agent.message.sent` with a category label (`"Ran test command"` / `"Ran build/typecheck command"` / `"Ran Bash command"`) — **raw command never rendered**; status → `testing` if the command matches test/build/typecheck patterns |
 | `tool_result` (Bash) | user turn | `quality_gate.passed` for clean test/build success; `quality_gate.failed` on `is_error: true`, `toolUseResult.interrupted: true`, or stderr matching hard-failure language (`error`/`failed`/`fatal`/`FAIL`/etc.) — status → `failed` on any of those |
 | `tool_result` (Edit/Write/MultiEdit) | user turn | `artifact.produced` (kind `code_pr`); summary uses `structuredPatch` hunk count and `replaceAll` flag without exposing raw content |
 | `thinking` | anywhere | **ignored / redacted by default.** The office never displays raw thinking content. If a future feature needs to surface rationale, generate a short summary separately — never pass the raw `thinking` field through to a rendered surface. |
@@ -145,7 +145,7 @@ High-signal tool mappings (beyond Read/Edit/Bash):
 
 | Tool | Mapping |
 | --- | --- |
-| `mcp__<server>__<tool>` | `agent.message.sent` ("MCP action via `<server>`") — input/output never rendered |
+| `mcp__<server>__<tool>` | `agent.message.sent` (`"MCP action observed"`) — neither server name nor input/output is rendered; server names can carry client/project details |
 | `Task` / `TaskCreate` / `TaskUpdate` | `agent.message.sent` ("<tool> observed (task state change)") — payload never rendered |
 | `AskUserQuestion` | `agent.message.sent` ("Asked the human a question (observed; not surfaced as a decision)") — **never `decision.requested`** because observed mode is read-only; question content never rendered |
 | Other / unknown tools (WebFetch, ToolSearch, etc.) | log-only — the model's text block already summarises what happened |
@@ -190,16 +190,24 @@ A few things the office model wants live outside the transcript:
   state, not something to render. The mapper drops `thinking` blocks; if a
   future feature needs to surface rationale, it generates a short summary
   separately rather than passing the raw `thinking` field through to a rendered surface.
+- **Bash command text is never rendered.** Activity-log messages for `Bash`
+  use the fixed [`safeBashCommandLabel()`](../../src/lib/redact.ts) category
+  output (`"Ran test command"` / `"Ran build/typecheck command"` /
+  `"Ran Bash command"`). The raw command — which can carry API keys, tokens,
+  environment variables, URLs with query strings, branch names, and inline
+  secrets — never reaches an event payload.
 - **Bash stderr is sanitised before display.** `quality_gate.failed.notes`
   is filtered through [`sanitizeForNotes()`](../../src/lib/redact.ts), which
-  redacts `/Users/<name>` and `/home/<name>` paths to `/<HOME>/`, redacts
-  GitHub URLs to `https://github.com/<org>/<repo>/...`, takes only the first
-  line, and truncates to 120 chars. The `interrupted: true` case bypasses
-  stderr entirely with a fixed label.
+  redacts home paths, redacts GitHub URLs (with only `/pull/<n>` and
+  `/issues/<n>` tails preserved — `/blob/<branch>/<file>`, `/compare`,
+  `/actions/runs/<id>` collapse to `/…`), takes only the first line, and
+  truncates to 120 chars. The `interrupted: true` case bypasses stderr
+  entirely with a fixed label.
 - **Tool inputs are never rendered** for MCP, Task, TaskCreate, TaskUpdate,
   AskUserQuestion. The mapper emits a category summary; the actual input
   payload (page selectors, task descriptions, question text, options) stays
-  out of office events.
+  out of office events. For MCP, the server name itself is not rendered
+  either — custom MCP server names can carry client or project details.
 - **Attachment payloads are opaque** to the validator and the mapper —
   no part of an attachment ever reaches a rendered surface.
 

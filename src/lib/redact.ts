@@ -38,19 +38,55 @@ export function redactHomePaths(text: string): string {
 }
 
 /**
- * Replace GitHub URLs with a generic `https://github.com/<org>/<repo>`
- * shape. Preserves the path tail (`/pull/42`, `/issues/100`, etc.) because
- * the issue/PR number is identifying but not as sensitive as the org/repo.
+ * Replace GitHub URLs with a generic `https://github.com/<org>/<repo>` shape.
+ *
+ * Only the safest path tails are preserved (PR/issue number); anything else
+ * — `/blob/<branch>/<path>`, `/compare/<branch>...<branch>`, `/actions/runs`,
+ * etc. — collapses to `/…` because those tails can contain branch names,
+ * file paths, internal route names, run IDs, or commit shas that are
+ * identifying or potentially sensitive.
  *
  * Today the mapper uses raw `prUrl` from `pr-link` lines in the artifact
  * `ref` field — that stays unredacted because observed mode is local-only.
- * This helper exists for the eventual hosted-demo / export path.
+ * This helper exists for the rendered-notes path and the eventual
+ * hosted-demo / export surface.
  */
 export function redactGitHubUrls(text: string): string {
+  // Match `https://github.com/<org>/<repo>` optionally followed by a path.
   return text.replace(
-    /https:\/\/github\.com\/[^/\s]+\/[^/\s?#]+/g,
-    "https://github.com/<org>/<repo>",
+    /https:\/\/github\.com\/[^/\s]+\/[^/\s?#]+(\/[^\s?#)]*)?/g,
+    (_url, tail: string | undefined) => {
+      const safeTail = tail?.match(/^\/(pull|issues)\/\d+\b/)?.[0];
+      if (safeTail) return `https://github.com/<org>/<repo>${safeTail}`;
+      if (tail && tail.length > 0) return "https://github.com/<org>/<repo>/…";
+      return "https://github.com/<org>/<repo>";
+    },
   );
+}
+
+/**
+ * Return a category label for a Bash command without rendering the command
+ * itself. Real Bash commands can carry API keys, tokens, environment
+ * variables, URLs with query params, branch names, private file paths
+ * outside the home prefix, database connection strings, and inline secrets
+ * passed as flags. `sanitizeForNotes()` alone catches home paths and
+ * GitHub URLs but can't catch any of those.
+ *
+ * The current category set is intentionally narrow — test/build/typecheck
+ * vs generic. Adding more categories means deciding which command-line
+ * keywords are safe to surface. Today, only well-known runner names
+ * (vitest, jest, pytest, tsc, etc.) are looked at; everything else lands
+ * in the generic bucket.
+ */
+export function safeBashCommandLabel(command: string | undefined): string {
+  if (!command || command.trim().length === 0) return "Ran Bash command";
+  // Test runners
+  if (/\b(?:test|vitest|jest|pytest|mocha)\b/i.test(command)) return "Ran test command";
+  if (/\b(?:go|cargo)\s+test\b/i.test(command)) return "Ran test command";
+  // Build / typecheck
+  if (/\b(?:build|tsc|typecheck|lint)\b/i.test(command)) return "Ran build/typecheck command";
+  // Generic — never include the command text
+  return "Ran Bash command";
 }
 
 /**

@@ -617,13 +617,88 @@ describe("mapper — redaction in Bash failure notes", () => {
   });
 });
 
+describe("mapper — Bash command privacy (never renders raw arguments)", () => {
+  it("Bash with API key in the command line is rendered as a generic label only", () => {
+    const session = mapTranscriptToSession([
+      systemInit(),
+      userPrompt("call the API"),
+      assistantToolUse(
+        "Bash",
+        { command: "curl -H 'Authorization: Bearer sk-secret-key-1234' https://api.example.com" },
+        "b-1",
+      ),
+    ]);
+    const messages = session.events
+      .filter((e) => e.type === "agent.message.sent")
+      .map((e) => (e.payload as { message: string }).message);
+    expect(messages).toContain("Ran Bash command");
+    for (const m of messages) {
+      expect(m).not.toContain("sk-secret-key-1234");
+      expect(m).not.toContain("Bearer");
+      expect(m).not.toContain("Authorization");
+    }
+  });
+
+  it("Bash with URL query params is rendered as a generic label only", () => {
+    const session = mapTranscriptToSession([
+      systemInit(),
+      userPrompt("hit the endpoint"),
+      assistantToolUse(
+        "Bash",
+        { command: "curl 'https://api.example.com/secret?token=abc&user=internal-user'" },
+        "b-1",
+      ),
+    ]);
+    const messages = session.events
+      .filter((e) => e.type === "agent.message.sent")
+      .map((e) => (e.payload as { message: string }).message);
+    for (const m of messages) {
+      expect(m).not.toContain("token=abc");
+      expect(m).not.toContain("user=internal-user");
+      expect(m).not.toContain("secret?");
+    }
+  });
+
+  it("Bash test command renders 'Ran test command' (category label, not raw command)", () => {
+    const session = mapTranscriptToSession([
+      systemInit(),
+      userPrompt("run tests"),
+      assistantToolUse("Bash", { command: "pnpm test --grep 'internal-feature-flag'" }, "b-1"),
+    ]);
+    const messages = session.events
+      .filter((e) => e.type === "agent.message.sent")
+      .map((e) => (e.payload as { message: string }).message);
+    expect(messages).toContain("Ran test command");
+    for (const m of messages) {
+      expect(m).not.toContain("internal-feature-flag");
+      expect(m).not.toContain("--grep");
+    }
+  });
+
+  it("agent.status.changed message for testing also uses the generic label", () => {
+    const session = mapTranscriptToSession([
+      systemInit(),
+      userPrompt("run tests"),
+      assistantToolUse("Bash", { command: "vitest run --reporter='internal-format'" }, "b-1"),
+    ]);
+    const statusMessages = session.events
+      .filter((e) => e.type === "agent.status.changed")
+      .map((e) => (e.payload as { message?: string }).message ?? "")
+      .filter((m) => m.length > 0);
+    for (const m of statusMessages) {
+      expect(m).not.toContain("internal-format");
+      expect(m).not.toContain("--reporter");
+    }
+  });
+});
+
 describe("mapper — log-only visibility for high-signal tools", () => {
-  it("MCP tools emit a single agent.message.sent summary (no raw input)", () => {
+  it("MCP tools emit a generic summary — neither server name nor inputs are rendered", () => {
     const session = mapTranscriptToSession([
       systemInit(),
       userPrompt("look up the page"),
       assistantToolUse(
-        "mcp__Claude_in_Chrome__find",
+        "mcp__Acme_Internal__find",
         { selector: "secret-internal-id", url: "https://private.example.com" },
         "m-1",
       ),
@@ -631,9 +706,11 @@ describe("mapper — log-only visibility for high-signal tools", () => {
     const messages = session.events
       .filter((e) => e.type === "agent.message.sent")
       .map((e) => (e.payload as { message: string }).message);
-    expect(messages).toContain("MCP action via Claude_in_Chrome");
-    // Inputs must not be rendered.
+    expect(messages).toContain("MCP action observed");
+    // Neither the server name (which can carry client/project details) nor
+    // the input payload should leak.
     for (const m of messages) {
+      expect(m).not.toContain("Acme_Internal");
       expect(m).not.toContain("secret-internal-id");
       expect(m).not.toContain("private.example.com");
     }
