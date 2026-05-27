@@ -7,6 +7,7 @@
 ## What you'll see
 
 - **Two scripted scenarios.** `REQ-014 Add dark mode` (happy-path feature) and `BUG-032 Dashboard filter` (Observe → Intent incident loop). Switch via the dropdown at the top of the page.
+- **One observed scenario (v0.2 preview).** `Observed — Refactor button` plays a sample Claude Code session in read-only mode. The Decision Inbox shows a read-only notice; a banner near the top tags the session origin. Today the events come from a static fixture; v0.2 wires in the real transcript parser.
 - **8 agents, 8 rooms.** Each agent has a distinct silhouette, a primary room, and a real-time status. Click any sprite to open the Agent Drawer.
 - **Visible handoffs.** Sprites physically move between rooms when ownership transfers. A Phase Timeline at the top of the office shows where the work item is in the chain.
 - **Human-in-the-loop.** The Decision Inbox surfaces token-naming decisions, roll-forward vs roll-back choices, and **simulated P7 approvals** for merges/deploys.
@@ -52,7 +53,7 @@ See [docs/portfolio/demo-script.md](docs/portfolio/demo-script.md) for the full 
 
 ```sh
 pnpm typecheck    # tsc --noEmit
-pnpm test         # vitest run — 73 tests across reducer, validator, and Claude Code hooks
+pnpm test         # vitest run — 81 tests across reducer, validator, parser stub, and Claude Code hooks
 pnpm build        # next build
 ```
 
@@ -76,8 +77,8 @@ src/
   app/                 Next.js App Router entry
   components/          Office, drawers, decision inbox, activity log, phase timeline, controls
   state/               Zustand store + pure applyEvent reducer
-  data/                Mock agents, rooms, work items, per-scenario event streams
-  lib/                 Scenario validator
+  data/                Mock agents, rooms, work items, per-scenario event streams + observed-sample fixture
+  lib/                 Scenario validator, Claude Code parser (v0.2 stub)
   types/               ADLC, agents, rooms, work items, workflow events, governance
 ```
 

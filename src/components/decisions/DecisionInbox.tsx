@@ -1,15 +1,41 @@
 "use client";
 
 import { useOfficeStore } from "@/state/officeStore";
+import { SCENARIOS } from "@/data/scenarios";
 
 export default function DecisionInbox() {
+  const scenarioId = useOfficeStore((s) => s.scenarioId);
   const decisions = useOfficeStore((s) => s.decisions);
   const resolveDecision = useOfficeStore((s) => s.resolveDecision);
   const resolveApproval = useOfficeStore((s) => s.resolveApproval);
 
+  const isObserved = SCENARIOS[scenarioId].source === "observed";
   const open = decisions.filter((d) => !d.resolved);
 
   const hasOpen = open.length > 0;
+
+  if (isObserved) {
+    return (
+      <section
+        className="rounded-lg border border-iris/30 bg-office-panel/80 p-3"
+        aria-label="Decision inbox (read-only observer mode)"
+      >
+        <header className="flex items-center justify-between mb-2">
+          <h2 className="text-xs font-semibold uppercase tracking-wide flex items-center gap-2">
+            Decision Inbox
+            <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-iris/20 text-iris ring-1 ring-iris/40">
+              read-only
+            </span>
+          </h2>
+          <span className="text-[10px] font-mono text-office-muted">observer</span>
+        </header>
+        <p className="text-xs text-office-muted italic leading-snug">
+          Observed sessions are read-only. Decisions surface in the activity log but are
+          not resolved from the office — the original Claude Code session owns the human-in-the-loop.
+        </p>
+      </section>
+    );
+  }
 
   return (
     <section

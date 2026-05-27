@@ -58,16 +58,34 @@ export function validateScenario(scenario: Scenario): ValidationIssue[] {
       }
     });
 
-    const ownerChanges = scenario.events.filter(
-      (e) => e.type === "work_item.owner.changed",
-    ).length;
-    if (scenario.chain.length !== ownerChanges) {
-      push(
-        "n/a",
-        -1,
-        `scenario.chain.length (${scenario.chain.length}) does not match work_item.owner.changed count (${ownerChanges})`,
-      );
+    // Scripted scenarios drive handoffs explicitly, so chain length must
+    // match the number of owner changes. Observed scenarios are sourced from
+    // a real session — a single agent can produce many owner.changed events
+    // (or none), so we only check that every chain entry is a known agent.
+    if (scenario.source === "scripted") {
+      const ownerChanges = scenario.events.filter(
+        (e) => e.type === "work_item.owner.changed",
+      ).length;
+      if (scenario.chain.length !== ownerChanges) {
+        push(
+          "n/a",
+          -1,
+          `scenario.chain.length (${scenario.chain.length}) does not match work_item.owner.changed count (${ownerChanges})`,
+        );
+      }
     }
+  }
+
+  // --- Observed-mode invariants ---
+  // Observed sessions are read-only: a decision or approval surfaced in an
+  // observed run has nothing in the UI to resolve it, so the run would stall.
+  // Catch that at validation time, not at runtime.
+  if (scenario.source === "observed") {
+    scenario.events.forEach((event, i) => {
+      if (event.type === "decision.requested" || event.type === "approval.requested") {
+        push(event.id, i, `observed scenarios must not contain ${event.type} — observer mode is read-only`);
+      }
+    });
   }
 
   scenario.events.forEach((event, i) => {

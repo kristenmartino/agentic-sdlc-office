@@ -5,11 +5,15 @@ import { SCENARIOS } from "@/data/scenarios";
 import type { WorkflowEvent } from "@/types/workflow-events";
 
 /**
- * Plays the full scripted scenario synchronously by calling tick(),
- * resolving decisions/approvals with the recommended option whenever
- * the run pauses on a human.
+ * Plays the scenario synchronously by calling tick(), resolving decisions
+ * and approvals with the recommended option whenever the run pauses on a
+ * human. Observed scenarios should never pause — that's the read-only
+ * invariant; if one does, the assertion in the catch will fire.
  */
-function playToCompletion(scenarioId: "req-014" | "bug-032", maxSteps = 500) {
+function playToCompletion(
+  scenarioId: "req-014" | "bug-032" | "observed-sample",
+  maxSteps = 500,
+) {
   const store = useOfficeStore.getState();
   store.loadScenario(scenarioId);
   useOfficeStore.getState().start();
@@ -48,6 +52,15 @@ describe("officeStore reducer", () => {
     expect(final.runState).toBe("completed");
     expect(final.workItem.status).toBe("done");
     expect(final.log.length).toBe(SCENARIOS["bug-032"].events.length);
+  });
+
+  it("observed-sample plays end-to-end without ever entering awaiting_human", () => {
+    const final = playToCompletion("observed-sample");
+    expect(final.runState).toBe("completed");
+    expect(final.workItem.status).toBe("done");
+    expect(final.log.length).toBe(SCENARIOS["observed-sample"].events.length);
+    // No decisions or approvals ever surfaced (read-only invariant).
+    expect(final.decisions).toEqual([]);
   });
 
   it("transitions to awaiting_human on decision.requested and back to running on resolveDecision", () => {

@@ -104,9 +104,25 @@ The timeline flips its final pill green.
 
 ---
 
+## Observed — v0.2 sneak peek (~30 s, optional)
+
+If the audience asks "what's next?" — open this. Otherwise skip.
+
+> "There's a third scenario in the dropdown — `Observed — Refactor button`. This is the v0.2 spike. Instead of replaying a scripted feature, it replays a captured Claude Code session. One agent, no decisions, read-only."
+
+Switch the scenario dropdown to **Observed — Refactor button (v0.2 preview)**. Note the purple banner at the top of the page and the `v0.2 · observed` chip next to the scenario name.
+
+> "Mira works through a small refactor — reads the file, plans the edit, writes a diff, runs the tests, finishes. The Decision Inbox is read-only — observed sessions don't surface human-in-the-loop choices because the original Claude Code session already handles that."
+
+Click **Start Demo**. Watch Mira progress through her states. The run completes in ~40 seconds of wall-clock time.
+
+> "Today the events come from a static JSON fixture — the parser stub is in place, the real Claude Code transcript wiring is the v0.2 task. The point of the spike was to prove the office can render an observed session without any contract changes — and it can."
+
+---
+
 ## Out (15 s)
 
-> "v0.1 is the mock. Next is connecting it to a real local Claude Code observer — same model, real activity. Roadmap and non-goals are in `docs/product/now-next-later-never.md`. Repo has 73 tests and CI on every PR. Thanks."
+> "v0.1 is the mock. v0.2 connects it to a real local Claude Code observer — the spike that ships with v0.1 is the architectural plumbing for that. Roadmap and non-goals are in `docs/product/now-next-later-never.md`. Repo has 81 tests and CI on every PR. Thanks."
 
 ---
 
