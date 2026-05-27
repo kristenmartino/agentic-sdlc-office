@@ -157,6 +157,7 @@ A few things the office model wants live outside the transcript:
 - ✅ Format documented above.
 - ✅ Raw-line parser at [`parseRawTranscript()`](../../src/lib/claude-code-transcript.ts) — JSONL → typed lines. Defensive against unknown fields.
 - ✅ Synthetic fixture covering one tool-using session.
-- ✅ Strict shape validator at [`validateRawTranscript()`](../../src/lib/claude-code-transcript.ts) — catches unknown `type`, wrong `message.role`, unknown content block kinds, malformed `tool_use`/`tool_result`, non-ISO timestamps. Returns issues, doesn't throw. The mapper should refuse to run on a session with issues.
-- ⏳ Mapping from raw lines to `WorkflowEvent[]` — still in [`claude-code-parser.ts`](../../src/lib/claude-code-parser.ts) as `parseClaudeCodeTranscript`, which still throws. Next PR's scope.
+- ✅ Strict shape validator at [`validateRawTranscript()`](../../src/lib/claude-code-transcript.ts) — catches unknown `type`, wrong `message.role`, unknown content block kinds, malformed `tool_use`/`tool_result`, non-ISO timestamps. Returns issues, doesn't throw.
+- ✅ Mapping from raw lines to `WorkflowEvent[]` at [`mapTranscriptToSession()`](../../src/lib/claude-code-transcript-mapper.ts) — implements the table above. [`parseClaudeCodeTranscript()`](../../src/lib/claude-code-parser.ts) is the public entry point: it parses, validates (fails loudly on issues), and maps in one call.
 - ⏳ App-level wiring (a "Load session from disk" affordance). Not started.
+- ⏳ Real anonymized transcript fixture (replace the hand-authored one with a redacted real session). Next PR's scope.

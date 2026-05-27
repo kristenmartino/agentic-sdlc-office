@@ -3,7 +3,6 @@ import {
   ClaudeCodeParserNotImplementedError,
   deriveChainFromEvents,
   parseClaudeCodeHookLog,
-  parseClaudeCodeTranscript,
   sessionFromFixture,
   type ParsedClaudeCodeSession,
 } from "./claude-code-parser";
@@ -26,18 +25,17 @@ function fixtureSession(overrides: Partial<ParsedClaudeCodeSession> = {}): Parse
   };
 }
 
-describe("claude-code-parser (v0.1 stub)", () => {
-  it("parseClaudeCodeTranscript throws ClaudeCodeParserNotImplementedError", () => {
-    expect(() => parseClaudeCodeTranscript("anything")).toThrow(ClaudeCodeParserNotImplementedError);
-  });
-
-  it("parseClaudeCodeHookLog throws ClaudeCodeParserNotImplementedError", () => {
+describe("claude-code-parser", () => {
+  // parseClaudeCodeTranscript is now implemented (PR #21 — see
+  // claude-code-transcript-mapper.test.ts for the full coverage). Only
+  // parseClaudeCodeHookLog remains a stub.
+  it("parseClaudeCodeHookLog still throws ClaudeCodeParserNotImplementedError", () => {
     expect(() => parseClaudeCodeHookLog([])).toThrow(ClaudeCodeParserNotImplementedError);
   });
 
-  it("error includes the parser name so callers can grep for it", () => {
+  it("parseClaudeCodeHookLog error names the deferred work", () => {
     try {
-      parseClaudeCodeTranscript("");
+      parseClaudeCodeHookLog([]);
     } catch (err) {
       expect(err).toBeInstanceOf(ClaudeCodeParserNotImplementedError);
       expect((err as Error).message).toMatch(/not implemented/i);

@@ -27,6 +27,10 @@ Where to look when a doc and the code disagree.
 | Workflow events | [`src/types/workflow-events.ts`](../../src/types/workflow-events.ts) | [`docs/workflow/event-model.md`](../workflow/event-model.md) |
 | Governance (decisions, blockers, gates) | [`src/types/governance.ts`](../../src/types/governance.ts) | [`docs/workflow/decision-model.md`](../workflow/decision-model.md), [`docs/workflow/blocker-model.md`](../workflow/blocker-model.md), [`docs/workflow/quality-gates.md`](../workflow/quality-gates.md) |
 | Scenarios (id, source, chain) | [`src/data/scenarios.ts`](../../src/data/scenarios.ts) | [`docs/demos/`](../demos/) |
+| Claude Code transcript shape | [`src/types/claude-code-transcript.ts`](../../src/types/claude-code-transcript.ts) | [`docs/architecture/claude-code-transcript-format.md`](claude-code-transcript-format.md) |
+| Transcript runtime sets (`KNOWN_RAW_TRANSCRIPT_LINE_TYPES`, `KNOWN_CONTENT_BLOCK_TYPES`) | [`src/lib/runtime-unions.ts`](../../src/lib/runtime-unions.ts) | — |
+| Transcript parse / validate behaviour | [`src/lib/claude-code-transcript.ts`](../../src/lib/claude-code-transcript.ts) | — |
+| Transcript → office events mapping | [`src/lib/claude-code-transcript-mapper.ts`](../../src/lib/claude-code-transcript-mapper.ts) | [`docs/architecture/claude-code-transcript-format.md`](claude-code-transcript-format.md) |
 
 ## A note on the docs that aren't here
 
