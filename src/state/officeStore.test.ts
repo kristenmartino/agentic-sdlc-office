@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { useOfficeStore } from "./officeStore";
+import { useOfficeStore, type OfficeState } from "./officeStore";
+import { applyEvent } from "./apply-event";
 import { SCENARIOS } from "@/data/scenarios";
+import type { WorkflowEvent } from "@/types/workflow-events";
 
 /**
  * Plays the full scripted scenario synchronously by calling tick(),
@@ -70,20 +72,102 @@ describe("officeStore reducer", () => {
     expect(useOfficeStore.getState().runState).toBe("running");
   });
 
-  it("agent.moved updates currentRoom", () => {
+  it("seekTo lands in awaiting_human when the seek point has an unresolved decision", () => {
+    useOfficeStore.getState().loadScenario("req-014");
+    const events = SCENARIOS["req-014"].events;
+    const decisionIdx = events.findIndex((e) => e.type === "decision.requested");
+    expect(decisionIdx).toBeGreaterThan(0);
+
+    // Seek to right after the decision.requested event — should be awaiting_human, not paused.
+    useOfficeStore.getState().seekTo(decisionIdx + 1);
+
+    const state = useOfficeStore.getState();
+    expect(state.runState).toBe("awaiting_human");
+    expect(state.decisions.some((d) => !d.resolved)).toBe(true);
+  });
+
+  it("tick surfaces awaiting_human when it would otherwise stall on an unresolved gate", () => {
+    // Simulate a stalled state: seek past decision.requested AND the immediately-following
+    // blocker.raised events so the next event would be the still-gated decision.resolved.
+    useOfficeStore.getState().loadScenario("req-014");
+    const events = SCENARIOS["req-014"].events;
+    const resolvedIdx = events.findIndex((e) => e.type === "decision.resolved");
+    expect(resolvedIdx).toBeGreaterThan(0);
+
+    // Seek to exactly the decision.resolved cursor — next event to apply is the resolution itself.
+    useOfficeStore.getState().seekTo(resolvedIdx);
+
+    // Force runState into "running" to exercise the tick guard.
+    useOfficeStore.setState({ runState: "running" });
+    useOfficeStore.getState().tick();
+
+    expect(useOfficeStore.getState().runState).toBe("awaiting_human");
+    // Cursor should NOT have advanced — the gate held.
+    expect(useOfficeStore.getState().cursor).toBe(resolvedIdx);
+  });
+});
+
+describe("applyEvent (pure reducer)", () => {
+  function freshState(): OfficeState {
     useOfficeStore.getState().reset();
-    const before = useOfficeStore.getState().agents.find((a) => a.id === "piper")!;
-    expect(before.currentRoom).toBe("product-research");
+    return useOfficeStore.getState();
+  }
 
-    // Synthetic agent.moved event applied via the same reducer.
-    const store = useOfficeStore.getState();
-    store.loadScenario("req-014");
+  it("agent.moved updates the moved agent's currentRoom and leaves others alone", () => {
+    const state = freshState();
+    const piperBefore = state.agents.find((a) => a.id === "piper")!;
+    expect(piperBefore.currentRoom).toBe("product-research");
 
-    // Inject via the store: call tick to apply a known event after monkeying cursor.
-    // Simpler: directly verify the reducer case via a manual event apply.
-    // (We re-use the public tick path by mounting a fake one-event scenario indirectly.)
-    // For v0.1 we rely on validateScenario + the case being added; this test asserts
-    // the reducer recognizes agent.moved as a no-throw event when none are in scenarios.
-    expect(store.agents.find((a) => a.id === "piper")?.currentRoom).toBe("product-research");
+    const event: WorkflowEvent = {
+      id: "evt_test_move",
+      ts: new Date().toISOString(),
+      actor: "piper",
+      type: "agent.moved",
+      subject: "piper",
+      payload: { agentId: "piper", from: "product-research", to: "human-office" },
+    };
+
+    const patch = applyEvent(state, event);
+    expect(patch.agents).toBeDefined();
+    const piperAfter = patch.agents!.find((a) => a.id === "piper")!;
+    const novaAfter = patch.agents!.find((a) => a.id === "nova")!;
+    expect(piperAfter.currentRoom).toBe("human-office");
+    expect(novaAfter.currentRoom).toBe("product-research"); // unchanged
+    expect(patch.cursor).toBe(state.cursor + 1);
+    expect(patch.log).toHaveLength(state.log.length + 1);
+  });
+
+  it("agent.status.changed sets the status and message", () => {
+    const state = freshState();
+    const event: WorkflowEvent = {
+      id: "evt_test_status",
+      ts: new Date().toISOString(),
+      actor: "mira",
+      type: "agent.status.changed",
+      subject: "mira",
+      payload: { agentId: "mira", from: "idle", to: "coding", message: "implementing tokens" },
+    };
+
+    const patch = applyEvent(state, event);
+    const mira = patch.agents!.find((a) => a.id === "mira")!;
+    expect(mira.status).toBe("coding");
+    expect(mira.message).toBe("implementing tokens");
+  });
+
+  it("work_item.owner.changed updates owner, phase, and assignedAgentIds", () => {
+    const state = freshState();
+    const event: WorkflowEvent = {
+      id: "evt_test_owner",
+      ts: new Date().toISOString(),
+      actor: "system",
+      type: "work_item.owner.changed",
+      subject: state.workItem.id,
+      payload: { workItemId: state.workItem.id, from: null, to: "theo" },
+    };
+
+    const patch = applyEvent(state, event);
+    expect(patch.workItem!.ownerAgentId).toBe("theo");
+    expect(patch.workItem!.currentPhase).toBe("Planning");
+    expect(patch.workItem!.assignedAgentIds).toContain("theo");
   });
 });
