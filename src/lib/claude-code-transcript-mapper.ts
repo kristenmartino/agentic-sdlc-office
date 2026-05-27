@@ -14,9 +14,10 @@ import type {
   ToolUseBlock,
 } from "@/types/claude-code-transcript";
 import type { Artifact, WorkItem } from "@/types/work-items";
-import type { QualityGate } from "@/types/governance";
+import type { Blocker, QualityGate } from "@/types/governance";
 import type { WorkflowEvent } from "@/types/workflow-events";
 import type { ParsedClaudeCodeSession } from "./claude-code-parser";
+import { safeBashCommandLabel, sanitizeForNotes } from "./redact";
 
 /**
  * Narrowing helpers for the unknown `toolUseResult` sibling field that real
@@ -93,7 +94,7 @@ function countPatchHunks(structuredPatch: unknown): number | undefined {
  * validated). Output: a session that drops straight into the scenario
  * registry — no further transformation needed.
  *
- * Mapping rules (from the PR #42 review acceptance spec):
+ * Mapping rules:
  *
  *   - First `system` line: seeds origin (sessionId, capturedAt).
  *   - First user `string` content: becomes `work_item.created` (title is the
@@ -187,7 +188,7 @@ export function mapTranscriptToSession(
   for (const line of rawLines) {
     switch (line.type) {
       case "system":
-        // Already used for origin; nothing else to emit.
+        mapSystemLine(line, ctx);
         break;
       case "assistant":
         mapAssistantLine(line, toolUseLookup, ctx);
@@ -199,10 +200,9 @@ export function mapTranscriptToSession(
         // Summary is informational — title hint only, no event.
         break;
       case "pr-link":
-        // PR #24 consumes pr-link → artifact.produced. The seed phase
-        // already used custom-title / ai-title for the work item title;
-        // here we surface the PR itself as an artifact attached to the
-        // work item.
+        // pr-link → artifact.produced. The seed phase already used
+        // custom-title / ai-title for the work item title; here we
+        // surface the PR itself as an artifact attached to the work item.
         mapPrLink(line, ctx);
         break;
       // ai-title / custom-title are consumed during work-item seeding,
@@ -276,17 +276,65 @@ function mapAssistantToolUse(tu: ToolUseBlock, ctx: MapperContext): void {
   if (tu.name === BASH_TOOL) {
     const command = (tu.input as { command?: string }).command;
     if (isTestCommand(command)) {
-      ctx.setStatus("testing", `Running ${command ?? "command"}`);
+      // Status message uses the generic label too — don't render the raw command.
+      ctx.setStatus("testing", "Running test command");
     }
-    if (command) {
-      ctx.emit("agent.message.sent", DEFAULT_AGENT, DEFAULT_AGENT, {
-        agentId: DEFAULT_AGENT,
-        message: `$ ${command}`,
-      });
-    }
+    // Render a *category* label only — raw Bash arguments can carry API
+    // keys, tokens, env vars, URLs with query strings, branch names,
+    // private paths outside the home prefix, and inline secrets.
+    // sanitizeForNotes can't catch those; safeBashCommandLabel never
+    // exposes the command text in the first place.
+    ctx.emit("agent.message.sent", DEFAULT_AGENT, DEFAULT_AGENT, {
+      agentId: DEFAULT_AGENT,
+      message: safeBashCommandLabel(command),
+    });
     return;
   }
-  // Other tool_use names (Task, WebFetch, etc.) — log-only for v0.2.
+
+  // ─── Log-only mappings for high-signal real-transcript tools ──────────
+  //
+  // The mapper deliberately surfaces a *summary* of these tools, never
+  // their raw inputs or outputs. Inputs to MCP browser tools, TaskCreate,
+  // and AskUserQuestion can carry queries, prompts, page content, etc.
+
+  // MCP tools — naming convention is `mcp__<server>__<tool>`.
+  // Server names can carry client/project details ("acme-internal", etc.),
+  // so the message stays generic. v0.3 can add an allow-list of
+  // well-known public servers if richer labels become useful.
+  if (tu.name.startsWith("mcp__")) {
+    ctx.emit("agent.message.sent", DEFAULT_AGENT, DEFAULT_AGENT, {
+      agentId: DEFAULT_AGENT,
+      message: "MCP action observed",
+    });
+    return;
+  }
+
+  // AskUserQuestion is the closest real-transcript event to a decision
+  // request. Observed mode is read-only — we MUST NOT emit
+  // decision.requested (the validator forbids it; the UI has no handler).
+  // Surface as a neutral log message so the activity log notes a human
+  // touchpoint happened without smuggling the question content.
+  if (tu.name === "AskUserQuestion") {
+    ctx.emit("agent.message.sent", DEFAULT_AGENT, DEFAULT_AGENT, {
+      agentId: DEFAULT_AGENT,
+      message: "Asked the human a question (observed; not surfaced as a decision)",
+    });
+    return;
+  }
+
+  // Task / TaskCreate / TaskUpdate — internal model task tracking.
+  // Render as a neutral activity message; payload is opaque.
+  if (tu.name === "Task" || tu.name === "TaskCreate" || tu.name === "TaskUpdate") {
+    ctx.emit("agent.message.sent", DEFAULT_AGENT, DEFAULT_AGENT, {
+      agentId: DEFAULT_AGENT,
+      message: `${tu.name} observed (task state change)`,
+    });
+    return;
+  }
+
+  // Everything else (WebFetch, ToolSearch, etc.) stays truly silent —
+  // the office shows whatever the assistant's text block said about it,
+  // which is the model's own summary and therefore safe.
 }
 
 function mapUserLine(
@@ -330,8 +378,8 @@ function mapToolResult(
   const command = (tu?.input as { command?: string } | undefined)?.command;
   const wasTestCommand = isBash && isTestCommand(command);
 
-  // Failure detection: PR #46 broadened this beyond `is_error: true`.
-  // Real transcripts often signal Bash failure via stderr / interrupted on
+  // Failure detection looks beyond `is_error: true` because real
+  // transcripts often signal Bash failure via stderr / interrupted on
   // toolUseResult, not via is_error. See real-transcript-discovery.md
   // (only 39 of 1187 results in the sampled session had is_error: true).
   const bashResult = isBash ? asBashToolUseResult(toolUseResult) : undefined;
@@ -429,9 +477,20 @@ function failureNotes(args: {
   const { tr, bashResult, interrupted, stderrIndicatesFailure } = args;
   if (interrupted) return "Interrupted before completion";
   if (stderrIndicatesFailure && bashResult?.stderr) {
-    return truncate(bashResult.stderr.trim(), 240);
+    // Real stderr can include local paths, test names, stack traces,
+    // env vars, and code snippets. `sanitizeForNotes` redacts home paths,
+    // collapses to a single line, redacts GitHub URLs, and truncates.
+    // See `docs/architecture/claude-code-transcript-format.md`'s privacy
+    // stance.
+    const safe = sanitizeForNotes(bashResult.stderr);
+    return safe.length > 0
+      ? `Bash failed — stderr: ${safe}`
+      : "Bash failed";
   }
-  return trimmedContent(tr.content);
+  // Non-stderr failure (is_error: true with no structured stderr). The
+  // model-visible content is already a summary, not arbitrary file
+  // content, but it can still contain paths — sanitise.
+  return sanitizeForNotes(trimmedContent(tr.content));
 }
 
 // ─── Work item seeding ───────────────────────────────────────────────────────
@@ -490,6 +549,57 @@ function seedWorkItem(rawLines: RawTranscriptLine[], ctx: MapperContext): void {
   ctx.workItemSeeded = true;
 }
 
+function mapSystemLine(line: RawSystemMessage, ctx: MapperContext): void {
+  // Most system lines are session-meta we already used for origin during
+  // `newContext` — they don't need a per-line event. The three subtypes
+  // below are real signals worth surfacing.
+  if (line.subtype === "compact_boundary") {
+    // Conversation history was compacted by the runtime. Activity log
+    // should make this visible because the run effectively has a seam.
+    ctx.emit("agent.message.sent", "system", DEFAULT_AGENT, {
+      agentId: DEFAULT_AGENT,
+      message: "Conversation compacted by the runtime",
+    });
+    return;
+  }
+
+  if (line.subtype === "api_error") {
+    if (!ctx.workItemSeeded) return;
+    const blocker: Blocker = {
+      id: `blk_${ctx.session.sessionId}_${ctx.nextBlockerN()}`,
+      workItemId: ctx.workItem.id,
+      raisedBy: DEFAULT_AGENT,
+      kind: "external",
+      description: "Anthropic API error during session",
+      resolution: null,
+      resolvedAt: null,
+    };
+    ctx.emit("blocker.raised", "system", ctx.workItem.id, { blocker });
+    return;
+  }
+
+  if (line.subtype === "stop_hook_summary") {
+    const hookErrors = (line as { hookErrors?: unknown }).hookErrors;
+    const errors = Array.isArray(hookErrors) ? hookErrors : [];
+    const prevented = (line as { preventedContinuation?: unknown }).preventedContinuation === true;
+    if (errors.length === 0 && !prevented) return; // clean hook summary — no event
+
+    if (!ctx.workItemSeeded) return;
+    const blocker: Blocker = {
+      id: `blk_${ctx.session.sessionId}_${ctx.nextBlockerN()}`,
+      workItemId: ctx.workItem.id,
+      raisedBy: DEFAULT_AGENT,
+      kind: prevented ? "gate_failed" : "external",
+      description: prevented
+        ? "Pre-commit hook prevented continuation"
+        : `Hook errors during session (${errors.length})`,
+      resolution: null,
+      resolvedAt: null,
+    };
+    ctx.emit("blocker.raised", "system", ctx.workItem.id, { blocker });
+  }
+}
+
 function mapPrLink(line: RawPrLinkLine, ctx: MapperContext): void {
   if (!ctx.workItemSeeded) return; // no work item to attach the PR to
 
@@ -529,6 +639,7 @@ interface MapperContext {
   lastTimestamp(): string;
   nextArtifactN(): number;
   nextGateN(): number;
+  nextBlockerN(): number;
 }
 
 function newContext(rawLines: RawTranscriptLine[]): MapperContext {
@@ -573,6 +684,7 @@ function newContext(rawLines: RawTranscriptLine[]): MapperContext {
   let evtN = 0;
   let artN = 0;
   let gateN = 0;
+  let blkN = 0;
   let currentStatus: string = "idle";
 
   const indexOf = new Map<string, number>();
@@ -619,6 +731,11 @@ function newContext(rawLines: RawTranscriptLine[]): MapperContext {
         gate.id = `gate_${sessionId}_${String(++gateN).padStart(4, "0")}`;
         workItem.qualityGateIds = [...workItem.qualityGateIds, gate.id];
       }
+      if (type === "blocker.raised") {
+        const blocker = (payload as { blocker: Blocker }).blocker;
+        blocker.id = `blk_${sessionId}_${String(++blkN).padStart(4, "0")}`;
+        workItem.blockerIds = [...workItem.blockerIds, blocker.id];
+      }
       events.push(next);
     },
     sessionSubject() {
@@ -632,6 +749,9 @@ function newContext(rawLines: RawTranscriptLine[]): MapperContext {
     },
     nextGateN() {
       return gateN + 1;
+    },
+    nextBlockerN() {
+      return blkN + 1;
     },
   };
 }

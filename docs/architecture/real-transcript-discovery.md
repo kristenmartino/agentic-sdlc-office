@@ -205,4 +205,9 @@ In rough priority order (high → low):
 - ✅ **`toolUseResult` consumed** (PR #46) — Bash failure detection now reads `stderr`/`interrupted`; Edit/Write/MultiEdit artifacts emit at tool_result time using `toolUseResult.filePath` and `structuredPatch` hunk counts (no raw oldString/newString rendered).
 - ✅ **`pr-link` → `artifact.produced`** (PR #46) — sessions that opened a PR now surface that PR in the activity log.
 - ✅ **Title hierarchy** (PR #46) — `custom-title` > first user prompt > `ai-title` > default placeholder.
-- ⏳ Next PR: log-only visibility for the high-signal unknown tools (MCP browser calls, `Task`/`TaskCreate`/`TaskUpdate`, `AskUserQuestion`, `compact_boundary`, `stop_hook_summary` with errors).
+- ✅ **Redaction + log-only visibility** (PR #47):
+  - Bash failure notes now go through `sanitizeForNotes()` — home paths and GitHub URLs redacted, first line only, 120-char truncation.
+  - MCP tools / Task / TaskCreate / TaskUpdate / AskUserQuestion all emit safe category summaries, never raw input.
+  - `compact_boundary` emits a marker `agent.message.sent`.
+  - `api_error` and `stop_hook_summary` with `hookErrors` or `preventedContinuation: true` emit `blocker.raised`.
+- ⏳ Next: real anonymized fixture committed to the repo, then local-file-loader UI.

@@ -174,8 +174,8 @@ describe("mapTranscriptToSession — per-event mapping", () => {
   });
 
   it("Edit tool_use without a tool_result → no artifact (edit didn't apply)", () => {
-    // PR #24 moved artifact emission to tool_result time, so an
-    // unmatched/interrupted Edit doesn't leak a phantom artifact.
+    // Artifact emission happens at tool_result time, so an unmatched
+    // or interrupted Edit doesn't leak a phantom artifact.
     const session = mapTranscriptToSession([
       systemInit(),
       userPrompt("hello"),
@@ -366,7 +366,7 @@ describe("mapper output structure", () => {
   });
 });
 
-describe("PR #24 — consume toolUseResult", () => {
+describe("mapper — toolUseResult consumption", () => {
   function toolResultWithStructured(
     toolUseId: string,
     content: string,
@@ -471,7 +471,7 @@ describe("PR #24 — consume toolUseResult", () => {
   });
 });
 
-describe("PR #24 — pr-link → artifact.produced", () => {
+describe("mapper — pr-link → artifact.produced", () => {
   it("a pr-link line emits artifact.produced with kind=code_pr", () => {
     const session = mapTranscriptToSession([
       systemInit(),
@@ -511,7 +511,7 @@ describe("PR #24 — pr-link → artifact.produced", () => {
   });
 });
 
-describe("PR #24 — title hierarchy", () => {
+describe("mapper — title hierarchy", () => {
   it("custom-title overrides the user prompt", () => {
     const session = mapTranscriptToSession([
       systemInit(),
@@ -549,10 +549,308 @@ describe("PR #24 — title hierarchy", () => {
   });
 });
 
+describe("mapper — redaction in Bash failure notes", () => {
+  function toolResultWithStructured(
+    toolUseId: string,
+    content: string,
+    structured: Record<string, unknown>,
+    isError = false,
+  ): RawTranscriptLine {
+    return {
+      type: "user",
+      sessionId: SID,
+      timestamp: T0,
+      message: {
+        role: "user",
+        content: [{ type: "tool_result", tool_use_id: toolUseId, content, is_error: isError }],
+      },
+      toolUseResult: structured,
+    } as RawTranscriptLine;
+  }
+
+  it("home paths in stderr are redacted from quality_gate.failed notes", () => {
+    const session = mapTranscriptToSession([
+      systemInit(),
+      userPrompt("ship"),
+      assistantToolUse("Bash", { command: "pnpm test" }, "b-1"),
+      toolResultWithStructured("b-1", "", {
+        stderr: "Error: at /Users/realuser/repo/src/x.test.ts:12",
+      }),
+    ]);
+    const failed = session.events.find((e) => e.type === "quality_gate.failed");
+    expect(failed).toBeDefined();
+    const notes = (failed!.payload as { gate: QualityGate }).gate.notes ?? "";
+    expect(notes).toContain("/<HOME>/");
+    expect(notes).not.toContain("realuser");
+  });
+
+  it("multi-line stderr collapses to first line + ellipsis", () => {
+    const session = mapTranscriptToSession([
+      systemInit(),
+      userPrompt("ship"),
+      assistantToolUse("Bash", { command: "pnpm test" }, "b-1"),
+      toolResultWithStructured("b-1", "", {
+        stderr: "Error: line one\n  at file.ts:1\n  at file.ts:2",
+      }),
+    ]);
+    const failed = session.events.find((e) => e.type === "quality_gate.failed");
+    const notes = (failed!.payload as { gate: QualityGate }).gate.notes ?? "";
+    expect(notes).not.toContain("at file.ts:1");
+    expect(notes).not.toContain("at file.ts:2");
+  });
+
+  it("interrupted result uses a fixed safe label (no raw stderr at all)", () => {
+    const session = mapTranscriptToSession([
+      systemInit(),
+      userPrompt("ship"),
+      assistantToolUse("Bash", { command: "pnpm test" }, "b-1"),
+      toolResultWithStructured("b-1", "", {
+        stderr: "some sensitive content with /Users/realuser/private/data",
+        interrupted: true,
+      }),
+    ]);
+    const failed = session.events.find((e) => e.type === "quality_gate.failed");
+    const notes = (failed!.payload as { gate: QualityGate }).gate.notes ?? "";
+    expect(notes).toBe("Interrupted before completion");
+    expect(notes).not.toContain("realuser");
+    expect(notes).not.toContain("private");
+  });
+});
+
+describe("mapper — Bash command privacy (never renders raw arguments)", () => {
+  it("Bash with API key in the command line is rendered as a generic label only", () => {
+    const session = mapTranscriptToSession([
+      systemInit(),
+      userPrompt("call the API"),
+      assistantToolUse(
+        "Bash",
+        { command: "curl -H 'Authorization: Bearer sk-secret-key-1234' https://api.example.com" },
+        "b-1",
+      ),
+    ]);
+    const messages = session.events
+      .filter((e) => e.type === "agent.message.sent")
+      .map((e) => (e.payload as { message: string }).message);
+    expect(messages).toContain("Ran Bash command");
+    for (const m of messages) {
+      expect(m).not.toContain("sk-secret-key-1234");
+      expect(m).not.toContain("Bearer");
+      expect(m).not.toContain("Authorization");
+    }
+  });
+
+  it("Bash with URL query params is rendered as a generic label only", () => {
+    const session = mapTranscriptToSession([
+      systemInit(),
+      userPrompt("hit the endpoint"),
+      assistantToolUse(
+        "Bash",
+        { command: "curl 'https://api.example.com/secret?token=abc&user=internal-user'" },
+        "b-1",
+      ),
+    ]);
+    const messages = session.events
+      .filter((e) => e.type === "agent.message.sent")
+      .map((e) => (e.payload as { message: string }).message);
+    for (const m of messages) {
+      expect(m).not.toContain("token=abc");
+      expect(m).not.toContain("user=internal-user");
+      expect(m).not.toContain("secret?");
+    }
+  });
+
+  it("Bash test command renders 'Ran test command' (category label, not raw command)", () => {
+    const session = mapTranscriptToSession([
+      systemInit(),
+      userPrompt("run tests"),
+      assistantToolUse("Bash", { command: "pnpm test --grep 'internal-feature-flag'" }, "b-1"),
+    ]);
+    const messages = session.events
+      .filter((e) => e.type === "agent.message.sent")
+      .map((e) => (e.payload as { message: string }).message);
+    expect(messages).toContain("Ran test command");
+    for (const m of messages) {
+      expect(m).not.toContain("internal-feature-flag");
+      expect(m).not.toContain("--grep");
+    }
+  });
+
+  it("agent.status.changed message for testing also uses the generic label", () => {
+    const session = mapTranscriptToSession([
+      systemInit(),
+      userPrompt("run tests"),
+      assistantToolUse("Bash", { command: "vitest run --reporter='internal-format'" }, "b-1"),
+    ]);
+    const statusMessages = session.events
+      .filter((e) => e.type === "agent.status.changed")
+      .map((e) => (e.payload as { message?: string }).message ?? "")
+      .filter((m) => m.length > 0);
+    for (const m of statusMessages) {
+      expect(m).not.toContain("internal-format");
+      expect(m).not.toContain("--reporter");
+    }
+  });
+});
+
+describe("mapper — log-only visibility for high-signal tools", () => {
+  it("MCP tools emit a generic summary — neither server name nor inputs are rendered", () => {
+    const session = mapTranscriptToSession([
+      systemInit(),
+      userPrompt("look up the page"),
+      assistantToolUse(
+        "mcp__Acme_Internal__find",
+        { selector: "secret-internal-id", url: "https://private.example.com" },
+        "m-1",
+      ),
+    ]);
+    const messages = session.events
+      .filter((e) => e.type === "agent.message.sent")
+      .map((e) => (e.payload as { message: string }).message);
+    expect(messages).toContain("MCP action observed");
+    // Neither the server name (which can carry client/project details) nor
+    // the input payload should leak.
+    for (const m of messages) {
+      expect(m).not.toContain("Acme_Internal");
+      expect(m).not.toContain("secret-internal-id");
+      expect(m).not.toContain("private.example.com");
+    }
+  });
+
+  it("AskUserQuestion stays log-only — never emits decision.requested", () => {
+    const session = mapTranscriptToSession([
+      systemInit(),
+      userPrompt("decide"),
+      assistantToolUse(
+        "AskUserQuestion",
+        {
+          question: "what should I do with this sensitive data?",
+          options: ["redact", "expose", "delete"],
+        },
+        "q-1",
+      ),
+    ]);
+    const types = session.events.map((e) => e.type);
+    expect(types).not.toContain("decision.requested");
+    expect(types).not.toContain("approval.requested");
+
+    const messages = session.events
+      .filter((e) => e.type === "agent.message.sent")
+      .map((e) => (e.payload as { message: string }).message);
+    expect(messages.some((m) => m.toLowerCase().includes("asked the human"))).toBe(true);
+    // Don't render the question text or option labels.
+    for (const m of messages) {
+      expect(m).not.toContain("sensitive data");
+      expect(m).not.toContain("redact");
+      expect(m).not.toContain("expose");
+    }
+  });
+
+  it("Task / TaskCreate / TaskUpdate emit one safe summary each, never raw payload", () => {
+    const session = mapTranscriptToSession([
+      systemInit(),
+      userPrompt("track tasks"),
+      assistantToolUse("TaskCreate", { description: "internal milestone" }, "t-1"),
+      assistantToolUse("TaskUpdate", { taskId: "abc", status: "in_progress" }, "t-2"),
+    ]);
+    const messages = session.events
+      .filter((e) => e.type === "agent.message.sent")
+      .map((e) => (e.payload as { message: string }).message);
+    expect(messages.some((m) => m.includes("TaskCreate"))).toBe(true);
+    expect(messages.some((m) => m.includes("TaskUpdate"))).toBe(true);
+    // Payload content stays out of the messages.
+    for (const m of messages) {
+      expect(m).not.toContain("internal milestone");
+      expect(m).not.toContain("in_progress");
+    }
+  });
+});
+
+describe("mapper — system subtypes (compact_boundary / api_error / stop_hook_summary)", () => {
+  it("compact_boundary emits a marker agent.message.sent", () => {
+    const session = mapTranscriptToSession([
+      systemInit(),
+      userPrompt("hello"),
+      { type: "system", subtype: "compact_boundary", sessionId: SID, timestamp: T0 } as RawTranscriptLine,
+      assistantText("continuing"),
+    ]);
+    const messages = session.events
+      .filter((e) => e.type === "agent.message.sent")
+      .map((e) => (e.payload as { message: string }).message);
+    expect(messages.some((m) => m.toLowerCase().includes("compacted"))).toBe(true);
+  });
+
+  it("api_error emits a blocker.raised with kind=external", () => {
+    const session = mapTranscriptToSession([
+      systemInit(),
+      userPrompt("hello"),
+      { type: "system", subtype: "api_error", sessionId: SID, timestamp: T0 } as RawTranscriptLine,
+    ]);
+    const blockers = session.events.filter((e) => e.type === "blocker.raised");
+    expect(blockers).toHaveLength(1);
+    const blk = (blockers[0].payload as { blocker: { kind: string } }).blocker;
+    expect(blk.kind).toBe("external");
+  });
+
+  it("stop_hook_summary with hookErrors emits a blocker.raised", () => {
+    const session = mapTranscriptToSession([
+      systemInit(),
+      userPrompt("hello"),
+      {
+        type: "system",
+        subtype: "stop_hook_summary",
+        sessionId: SID,
+        timestamp: T0,
+        hookCount: 2,
+        hookErrors: ["lint failed", "tsc failed"],
+        preventedContinuation: false,
+      } as RawTranscriptLine,
+    ]);
+    const blockers = session.events.filter((e) => e.type === "blocker.raised");
+    expect(blockers).toHaveLength(1);
+  });
+
+  it("stop_hook_summary with preventedContinuation maps to kind=gate_failed", () => {
+    const session = mapTranscriptToSession([
+      systemInit(),
+      userPrompt("hello"),
+      {
+        type: "system",
+        subtype: "stop_hook_summary",
+        sessionId: SID,
+        timestamp: T0,
+        hookCount: 1,
+        hookErrors: [],
+        preventedContinuation: true,
+      } as RawTranscriptLine,
+    ]);
+    const blockers = session.events.filter((e) => e.type === "blocker.raised");
+    expect(blockers).toHaveLength(1);
+    const blk = (blockers[0].payload as { blocker: { kind: string } }).blocker;
+    expect(blk.kind).toBe("gate_failed");
+  });
+
+  it("clean stop_hook_summary (no errors, no prevention) emits no event", () => {
+    const session = mapTranscriptToSession([
+      systemInit(),
+      userPrompt("hello"),
+      {
+        type: "system",
+        subtype: "stop_hook_summary",
+        sessionId: SID,
+        timestamp: T0,
+        hookCount: 3,
+        hookErrors: [],
+        preventedContinuation: false,
+      } as RawTranscriptLine,
+    ]);
+    expect(session.events.find((e) => e.type === "blocker.raised")).toBeUndefined();
+  });
+});
+
 describe("mapper — log-only line types from real transcripts", () => {
-  // PR #24: ai-title / custom-title are consumed by the seed phase (for
-  // title fallback); pr-link emits an artifact.produced. The remaining
-  // four (last-prompt, attachment, queue-operation) are log-only — they
+  // ai-title / custom-title are consumed by the seed phase (for title
+  // fallback); pr-link emits an artifact.produced. The remaining four
+  // (last-prompt, attachment, queue-operation) are log-only — they
   // must not produce any events beyond what an equivalent session
   // without them would produce.
   it("last-prompt / attachment / queue-operation produce no extra events", () => {
