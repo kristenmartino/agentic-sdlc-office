@@ -126,20 +126,35 @@ export function sessionFromFixture(fixture: ParsedClaudeCodeSession): ParsedClau
  * agent in between (`["rune", "piper", "rune"]` stays as-is — that's the
  * BUG-032 pattern).
  *
- * If the session has no owner.changed events but does name an initial owner
- * on its work item, falls back to `[workItem.ownerAgentId]`. As a last
- * resort returns an empty array — callers can decide what to do with that.
+ * Defensive against unvalidated input: unknown agent IDs in the payload
+ * are skipped silently rather than coerced into the chain. Callers that
+ * want strict validation should pass the session through `validateScenario`
+ * first.
+ *
+ * If the session has no owner.changed events but does name a valid initial
+ * owner on its work item, falls back to `[workItem.ownerAgentId]`. As a
+ * last resort returns an empty array — callers can decide what to do.
  */
 export function deriveChainFromEvents(session: ParsedClaudeCodeSession): AgentId[] {
   const owners: AgentId[] = [];
   for (const event of session.events) {
     if (event.type !== "work_item.owner.changed") continue;
-    const to = (event.payload as { to?: AgentId }).to;
-    if (!to) continue;
+    const to = (event.payload as { to?: unknown }).to;
+    if (!isKnownAgentId(to)) continue;
     if (owners[owners.length - 1] === to) continue;
     owners.push(to);
   }
   if (owners.length > 0) return owners;
-  if (session.workItem.ownerAgentId) return [session.workItem.ownerAgentId];
+  if (isKnownAgentId(session.workItem.ownerAgentId)) {
+    return [session.workItem.ownerAgentId];
+  }
   return [];
+}
+
+const KNOWN_AGENT_IDS: ReadonlySet<AgentId> = new Set([
+  "cora", "piper", "nova", "theo", "iris", "mira", "tess", "rune",
+]);
+
+function isKnownAgentId(value: unknown): value is AgentId {
+  return typeof value === "string" && KNOWN_AGENT_IDS.has(value as AgentId);
 }

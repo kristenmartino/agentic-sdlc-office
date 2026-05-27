@@ -117,6 +117,26 @@ describe("deriveChainFromEvents", () => {
     });
     expect(deriveChainFromEvents(session)).toEqual([]);
   });
+
+  it("silently skips owner.changed events with unknown agent IDs", () => {
+    const session = fixtureSession({
+      events: [
+        ownerChange("piper"),
+        ownerChange("bogus"),
+        ownerChange("nova"),
+      ],
+    });
+    expect(deriveChainFromEvents(session)).toEqual(["piper", "nova"]);
+  });
+
+  it("falls through to empty when the work item's initial owner is unknown", () => {
+    const session = fixtureSession({
+      events: [],
+      // Bypass TS so we can simulate an external JSON fixture with a bogus owner.
+      workItem: { ...OBSERVED_SAMPLE_INITIAL, ownerAgentId: "bogus" as never },
+    });
+    expect(deriveChainFromEvents(session)).toEqual([]);
+  });
 });
 
 function ownerChange(to: string): WorkflowEvent {

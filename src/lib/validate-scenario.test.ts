@@ -264,4 +264,122 @@ describe("validateScenario — initialWorkItem fields", () => {
     const issues = validateScenario(ok);
     expect(issues.some((i) => i.message.includes("ownerAgentId"))).toBe(false);
   });
+
+  it("flags an empty currentPhase", () => {
+    const bad: Scenario = {
+      ...SCENARIOS["observed-sample"],
+      initialWorkItem: { ...SCENARIOS["observed-sample"].initialWorkItem, currentPhase: "" },
+    };
+    const issues = validateScenario(bad);
+    expect(issues.some((i) => i.message.includes("initialWorkItem.currentPhase must be a non-empty string"))).toBe(true);
+  });
+
+  it("flags a non-boolean humanDecisionNeeded", () => {
+    const bad: Scenario = {
+      ...SCENARIOS["observed-sample"],
+      // @ts-expect-error — simulating external JSON that supplied a string
+      initialWorkItem: { ...SCENARIOS["observed-sample"].initialWorkItem, humanDecisionNeeded: "yes" },
+    };
+    const issues = validateScenario(bad);
+    expect(issues.some((i) => i.message.includes("initialWorkItem.humanDecisionNeeded must be boolean"))).toBe(true);
+  });
+
+  it("flags a non-string-or-null branch", () => {
+    const bad: Scenario = {
+      ...SCENARIOS["observed-sample"],
+      // @ts-expect-error — simulating external JSON that supplied a number
+      initialWorkItem: { ...SCENARIOS["observed-sample"].initialWorkItem, branch: 42 },
+    };
+    const issues = validateScenario(bad);
+    expect(issues.some((i) => i.message.includes("initialWorkItem.branch must be string | null"))).toBe(true);
+  });
+
+  it("flags a non-string-or-null worktreePath", () => {
+    const bad: Scenario = {
+      ...SCENARIOS["observed-sample"],
+      // @ts-expect-error — simulating external JSON that supplied an object
+      initialWorkItem: { ...SCENARIOS["observed-sample"].initialWorkItem, worktreePath: { path: "/x" } },
+    };
+    const issues = validateScenario(bad);
+    expect(issues.some((i) => i.message.includes("initialWorkItem.worktreePath must be string | null"))).toBe(true);
+  });
+
+  it("flags a non-array artifactIds", () => {
+    const bad: Scenario = {
+      ...SCENARIOS["observed-sample"],
+      // @ts-expect-error — string smuggled in where an array was expected
+      initialWorkItem: { ...SCENARIOS["observed-sample"].initialWorkItem, artifactIds: "art_one" },
+    };
+    const issues = validateScenario(bad);
+    expect(issues.some((i) => i.message.includes("initialWorkItem.artifactIds must be an array"))).toBe(true);
+  });
+
+  it("flags a non-string entry inside an ID array", () => {
+    const bad: Scenario = {
+      ...SCENARIOS["observed-sample"],
+      initialWorkItem: {
+        ...SCENARIOS["observed-sample"].initialWorkItem,
+        // @ts-expect-error — number smuggled into a string[]
+        decisionIds: ["dec_a", 7],
+      },
+    };
+    const issues = validateScenario(bad);
+    expect(issues.some((i) => i.message.includes("initialWorkItem.decisionIds[1] must be a string"))).toBe(true);
+  });
+
+  it("flags non-array acceptance / outOfScope", () => {
+    const bad1: Scenario = {
+      ...SCENARIOS["observed-sample"],
+      // @ts-expect-error — object instead of string[]
+      initialWorkItem: { ...SCENARIOS["observed-sample"].initialWorkItem, acceptance: { items: [] } },
+    };
+    const bad2: Scenario = {
+      ...SCENARIOS["observed-sample"],
+      // @ts-expect-error — null instead of array
+      initialWorkItem: { ...SCENARIOS["observed-sample"].initialWorkItem, outOfScope: null },
+    };
+    expect(validateScenario(bad1).some((i) => i.message.includes("initialWorkItem.acceptance must be an array"))).toBe(true);
+    expect(validateScenario(bad2).some((i) => i.message.includes("initialWorkItem.outOfScope must be an array"))).toBe(true);
+  });
+
+  it("flags a non-array modeHistory", () => {
+    const bad: Scenario = {
+      ...SCENARIOS["observed-sample"],
+      // @ts-expect-error — object instead of array
+      initialWorkItem: { ...SCENARIOS["observed-sample"].initialWorkItem, modeHistory: {} },
+    };
+    const issues = validateScenario(bad);
+    expect(issues.some((i) => i.message.includes("initialWorkItem.modeHistory must be an array"))).toBe(true);
+  });
+
+  it("flags malformed modeHistory entries (bad timestamp, mode, and agent)", () => {
+    const bad: Scenario = {
+      ...SCENARIOS["observed-sample"],
+      initialWorkItem: {
+        ...SCENARIOS["observed-sample"].initialWorkItem,
+        modeHistory: [
+          // @ts-expect-error — simulating external JSON
+          { ts: "not-a-date", from: null, to: "Bogus", by: "bogus" },
+        ],
+      },
+    };
+    const issues = validateScenario(bad);
+    expect(issues.some((i) => i.message.includes("modeHistory[0].ts: not a valid ISO 8601 timestamp"))).toBe(true);
+    expect(issues.some((i) => i.message.includes("modeHistory[0].to: unknown mode 'Bogus'"))).toBe(true);
+    expect(issues.some((i) => i.message.includes("modeHistory[0].by: unknown agent 'bogus'"))).toBe(true);
+  });
+
+  it("modeHistory[i].from = null is allowed (first mode set on the item)", () => {
+    const ok: Scenario = {
+      ...SCENARIOS["observed-sample"],
+      initialWorkItem: {
+        ...SCENARIOS["observed-sample"].initialWorkItem,
+        modeHistory: [
+          { ts: "2026-05-27T15:00:00.000Z", from: null, to: "Generate", by: "mira" },
+        ],
+      },
+    };
+    const issues = validateScenario(ok);
+    expect(issues.some((i) => i.message.includes("modeHistory"))).toBe(false);
+  });
 });
