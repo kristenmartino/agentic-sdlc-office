@@ -3,7 +3,9 @@ import {
   KNOWN_ADLC_MODES,
   KNOWN_AGENT_IDS,
   KNOWN_AGENT_STATUSES,
+  KNOWN_CONTENT_BLOCK_TYPES,
   KNOWN_EVENT_ACTORS,
+  KNOWN_RAW_TRANSCRIPT_LINE_TYPES,
   KNOWN_ROOM_IDS,
   KNOWN_WORKFLOW_EVENT_TYPES,
   KNOWN_WORK_ITEM_KINDS,
@@ -53,6 +55,20 @@ describe("KNOWN_* sets", () => {
     // Sanity bound: 31 came from counting WorkflowEventType members. If this
     // drifts, the runtime set is missing a value or has stale entries.
     expect(KNOWN_WORKFLOW_EVENT_TYPES.size).toBe(31);
+  });
+
+  it("KNOWN_RAW_TRANSCRIPT_LINE_TYPES covers system/user/assistant/summary", () => {
+    expect(KNOWN_RAW_TRANSCRIPT_LINE_TYPES.size).toBe(4);
+    for (const t of ["system", "user", "assistant", "summary"] as const) {
+      expect(KNOWN_RAW_TRANSCRIPT_LINE_TYPES.has(t)).toBe(true);
+    }
+  });
+
+  it("KNOWN_CONTENT_BLOCK_TYPES covers text/tool_use/tool_result/thinking", () => {
+    expect(KNOWN_CONTENT_BLOCK_TYPES.size).toBe(4);
+    for (const t of ["text", "tool_use", "tool_result", "thinking"] as const) {
+      expect(KNOWN_CONTENT_BLOCK_TYPES.has(t)).toBe(true);
+    }
   });
 });
 

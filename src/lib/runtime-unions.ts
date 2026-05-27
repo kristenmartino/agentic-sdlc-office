@@ -24,6 +24,10 @@ import type { RoomId } from "@/types/rooms";
 import type { ADLCMode } from "@/types/adlc";
 import type { WorkItemKind, WorkItemStatus } from "@/types/work-items";
 import type { WorkflowEventType } from "@/types/workflow-events";
+import type {
+  ContentBlock,
+  RawTranscriptLine,
+} from "@/types/claude-code-transcript";
 
 export const KNOWN_AGENT_IDS: ReadonlySet<AgentId> = new Set([
   "cora", "piper", "nova", "theo", "iris", "mira", "tess", "rune",
@@ -73,6 +77,14 @@ export const KNOWN_WORKFLOW_EVENT_TYPES: ReadonlySet<WorkflowEventType> = new Se
   "approval.requested", "approval.resolved",
   "meeting.started", "meeting.ended",
   "permission.bumped", "permission.expired",
+]);
+
+export const KNOWN_RAW_TRANSCRIPT_LINE_TYPES: ReadonlySet<RawTranscriptLine["type"]> = new Set([
+  "system", "user", "assistant", "summary",
+]);
+
+export const KNOWN_CONTENT_BLOCK_TYPES: ReadonlySet<ContentBlock["type"]> = new Set([
+  "text", "tool_use", "tool_result", "thinking",
 ]);
 
 /**
