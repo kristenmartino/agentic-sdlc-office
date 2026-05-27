@@ -48,6 +48,28 @@ export function validateScenario(scenario: Scenario): ValidationIssue[] {
   const push = (eventId: string, eventIndex: number, message: string) =>
     issues.push({ scenarioId: scenario.id, eventId, eventIndex, message });
 
+  // --- Chain validation ---
+  if (!Array.isArray(scenario.chain) || scenario.chain.length === 0) {
+    push("n/a", -1, "scenario.chain must be a non-empty array");
+  } else {
+    scenario.chain.forEach((agent, idx) => {
+      if (!VALID_AGENTS.has(agent)) {
+        push("n/a", -1, `scenario.chain[${idx}]: unknown agent '${agent}'`);
+      }
+    });
+
+    const ownerChanges = scenario.events.filter(
+      (e) => e.type === "work_item.owner.changed",
+    ).length;
+    if (scenario.chain.length !== ownerChanges) {
+      push(
+        "n/a",
+        -1,
+        `scenario.chain.length (${scenario.chain.length}) does not match work_item.owner.changed count (${ownerChanges})`,
+      );
+    }
+  }
+
   scenario.events.forEach((event, i) => {
     const eid = event.id;
 

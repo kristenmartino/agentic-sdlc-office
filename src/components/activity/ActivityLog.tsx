@@ -25,9 +25,12 @@ export default function ActivityLog() {
       ) : (
         <ul className="flex flex-col gap-1 max-h-[280px] overflow-y-auto pr-1">
           {recent.map((e) => {
-            // Find this event's index in the canonical log (0-based).
+            // logIndex is the playback position (0-based). The display index `#NNN` is the
+            // 1-based playback step, which is always in chronological order even when the
+            // underlying event IDs were assigned in source order before timestamp sorting.
             const logIndex = log.indexOf(e);
             const isCurrentTail = logIndex === log.length - 1;
+            const playbackStep = String(logIndex + 1).padStart(3, "0");
             return (
               <li key={e.id}>
                 <button
@@ -37,7 +40,7 @@ export default function ActivityLog() {
                     isCurrentTail ? "bg-white/[0.03]" : ""
                   }`}
                 >
-                  <span className="text-office-muted shrink-0">{e.id.slice(-4)}</span>
+                  <span className="text-office-muted shrink-0">#{playbackStep}</span>
                   <span className="text-office-text shrink-0">{e.type}</span>
                   <span className="text-office-muted truncate">
                     · {e.actor} → {e.subject}

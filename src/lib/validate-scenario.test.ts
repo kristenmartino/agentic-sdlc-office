@@ -28,8 +28,7 @@ describe("validateScenario", () => {
       ],
     };
     const issues = validateScenario(bad);
-    expect(issues.length).toBeGreaterThan(0);
-    expect(issues[0].message).toContain("invalid 'to' status");
+    expect(issues.some((i) => i.message.includes("invalid 'to' status"))).toBe(true);
   });
 
   it("flags a decision.resolved with no matching decision.requested", () => {
@@ -48,5 +47,33 @@ describe("validateScenario", () => {
     };
     const issues = validateScenario(bad);
     expect(issues.some((i) => i.message.includes("no matching decision.requested"))).toBe(true);
+  });
+
+  it("flags an empty chain", () => {
+    const bad: Scenario = { ...SCENARIOS["req-014"], chain: [] };
+    const issues = validateScenario(bad);
+    expect(issues.some((i) => i.message.includes("chain must be a non-empty array"))).toBe(true);
+  });
+
+  it("flags an unknown agent in the chain", () => {
+    const bad: Scenario = {
+      ...SCENARIOS["req-014"],
+      // @ts-expect-error — intentionally bad value for testing
+      chain: ["piper", "bogus", "theo"],
+    };
+    const issues = validateScenario(bad);
+    expect(issues.some((i) => i.message.includes("unknown agent 'bogus'"))).toBe(true);
+  });
+
+  it("flags chain length not matching owner.changed count", () => {
+    const bad: Scenario = { ...SCENARIOS["req-014"], chain: ["piper", "nova"] };
+    const issues = validateScenario(bad);
+    expect(issues.some((i) => i.message.includes("does not match work_item.owner.changed count"))).toBe(true);
+  });
+
+  it("BUG-032 chain with duplicate Rune still validates clean", () => {
+    // The known good case — Rune appears twice in BUG-032's chain (observer + reviewer).
+    const issues = validateScenario(SCENARIOS["bug-032"]);
+    expect(issues).toEqual([]);
   });
 });

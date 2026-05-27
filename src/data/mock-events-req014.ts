@@ -247,8 +247,12 @@ export const REQ_014_EVENTS: WorkflowEvent[] = [
 
   // Cora as courier for the merge approval: she leaves the Human Office to retrieve Rune's
   // review before surfacing the approval ask to the human.
+  { id: eid(), ts: ts(63.25), actor: "cora", type: "agent.message.sent", subject: "cora",
+    payload: { agentId: "cora", message: "Heading to Review/Security to collect Rune's review packet." } },
   { id: eid(), ts: ts(63.5), actor: "cora", type: "agent.moved", subject: "cora",
     payload: { agentId: "cora", from: "human-office", to: "review-security" } },
+  { id: eid(), ts: ts(65.25), actor: "cora", type: "agent.message.sent", subject: "cora",
+    payload: { agentId: "cora", message: "Bringing the review back to surface the merge approval." } },
   { id: eid(), ts: ts(65.5), actor: "cora", type: "agent.moved", subject: "cora",
     payload: { agentId: "cora", from: "review-security", to: "human-office" } },
 ];

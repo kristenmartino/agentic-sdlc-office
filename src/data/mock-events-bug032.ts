@@ -245,8 +245,12 @@ export const BUG_032_EVENTS: WorkflowEvent[] = [
   // --- Movement choreography ---
   // Cora as courier: leaves Human Office to collect Rune's expedited review, then returns
   // to surface the rollout decision to the human.
+  { id: eid(), ts: ts(55.25), actor: "cora", type: "agent.message.sent", subject: "cora",
+    payload: { agentId: "cora", message: "Collecting Rune's expedited review for the hotfix." } },
   { id: eid(), ts: ts(55.5), actor: "cora", type: "agent.moved", subject: "cora",
     payload: { agentId: "cora", from: "human-office", to: "review-security" } },
+  { id: eid(), ts: ts(57.25), actor: "cora", type: "agent.message.sent", subject: "cora",
+    payload: { agentId: "cora", message: "Returning to surface the roll-forward decision." } },
   { id: eid(), ts: ts(57.5), actor: "cora", type: "agent.moved", subject: "cora",
     payload: { agentId: "cora", from: "review-security", to: "human-office" } },
 ];

@@ -10,14 +10,19 @@ import { MOCK_AGENTS, AGENT_COLORS } from "@/data/mock-agents";
  * Position is derived from the count of work_item.owner.changed events,
  * so it correctly handles agents that appear twice in the chain (e.g. Rune
  * in BUG-032: observer at start, reviewer near the end).
+ *
+ * When the run completes, the final pill flips to green and a trailing
+ * "Done" indicator appears so the demo has a clear terminal state.
  */
 export default function PhaseTimeline() {
   const scenarioId = useOfficeStore((s) => s.scenarioId);
   const log = useOfficeStore((s) => s.log);
+  const runState = useOfficeStore((s) => s.runState);
 
   const chain = SCENARIOS[scenarioId].chain;
   const ownerChanges = log.filter((e) => e.type === "work_item.owner.changed").length;
   const position = ownerChanges - 1; // -1 before the first owner.changed fires
+  const isCompleted = runState === "completed";
 
   return (
     <div
@@ -32,7 +37,11 @@ export default function PhaseTimeline() {
         const agent = MOCK_AGENTS.find((a) => a.id === agentId)!;
         const isCurrent = idx === position;
         const isPast = idx < position;
-        const cls = isCurrent
+        const isFinalAndDone = isCompleted && idx === chain.length - 1;
+
+        const cls = isFinalAndDone
+          ? "bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-500/40"
+          : isCurrent
           ? "bg-cora/15 text-cora ring-1 ring-cora/40"
           : isPast
           ? "bg-office-line/60 text-office-muted"
@@ -55,6 +64,11 @@ export default function PhaseTimeline() {
           </div>
         );
       })}
+      {isCompleted && (
+        <span className="ml-2 px-1.5 py-0.5 rounded text-[10px] font-mono bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-500/40 shrink-0">
+          ✓ Done
+        </span>
+      )}
     </div>
   );
 }
