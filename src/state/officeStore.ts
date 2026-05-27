@@ -16,7 +16,7 @@ import { SCENARIOS, DEFAULT_SCENARIO_ID, type ScenarioId } from "@/data/scenario
 const STORAGE_NAME = "agentic-sdlc-office";
 const STORAGE_VERSION = 1;
 
-type RunState = "idle" | "running" | "paused" | "completed";
+type RunState = "idle" | "running" | "awaiting_human" | "paused" | "completed";
 
 export interface OfficeState {
   scenarioId: ScenarioId;
@@ -106,7 +106,12 @@ export const useOfficeStore = create<OfficeState>()(
         if (next.type === "decision.resolved" || next.type === "approval.resolved") {
           if (!state.pendingResolutions.has(next.subject)) return;
         }
-        set(applyEvent(state, next));
+        const patch = applyEvent(state, next);
+        // After surfacing a decision or approval, drop to awaiting_human until the user resolves it.
+        if (next.type === "decision.requested" || next.type === "approval.requested") {
+          patch.runState = "awaiting_human";
+        }
+        set(patch);
       },
 
       seekTo: (targetCursor) => {
@@ -149,6 +154,8 @@ export const useOfficeStore = create<OfficeState>()(
                 : d
             ),
             pendingResolutions: pending,
+            // If we were waiting on this, resume the tick loop.
+            runState: s.runState === "awaiting_human" ? "running" : s.runState,
           };
         }),
 
@@ -169,6 +176,7 @@ export const useOfficeStore = create<OfficeState>()(
                 : d
             ),
             pendingResolutions: pending,
+            runState: s.runState === "awaiting_human" ? "running" : s.runState,
           };
         }),
 
@@ -305,6 +313,14 @@ function applyEvent(state: OfficeState, event: WorkflowEvent): Partial<OfficeSta
         a.id === payload.agentId
           ? { ...a, status: payload.to, message: payload.message ?? a.message, lastAction: payload.message ?? a.lastAction }
           : a
+      );
+      break;
+    }
+
+    case "agent.moved": {
+      const payload = event.payload as { agentId: AgentId; from: string; to: string };
+      patch.agents = state.agents.map((a) =>
+        a.id === payload.agentId ? { ...a, currentRoom: payload.to as AgentInstance["currentRoom"] } : a
       );
       break;
     }
