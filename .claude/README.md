@@ -2,6 +2,21 @@
 
 Claude Code runtime config for this project.
 
+## What's here
+
+- [`settings.json`](settings.json) — project-wide permission rules (`allow` / `deny`) + PreToolUse hooks registration.
+- [`hooks/`](hooks/) — bash scripts that catch dynamic patterns the static `deny` list can't (e.g. `pnpm add <anything>`). See [hooks/README.md](hooks/README.md).
+- [`agents/`](agents/) — eight subagent definitions matching the office roles.
+
+## Two-layer enforcement
+
+The P0–P7 permission ladder in [docs/agents/permissions.md](../docs/agents/permissions.md) is now enforced two ways:
+
+1. **Subagent tool scoping** in [agents/*.md](agents/) — each agent only gets the tools it needs (Nova/Rune have no Write/Edit; only Cora has `Task`).
+2. **Project-wide deny rules + hooks** in [settings.json](settings.json) + [hooks/](hooks/) — catch dangerous commands and protected-file edits regardless of which agent attempted them.
+
+If the two ever drift, the hooks/settings layer wins (it's the runtime gate).
+
 ## `agents/`
 
 Eight subagent definitions, one per office role:
