@@ -6,7 +6,7 @@ Canonical definition lives in [`src/types/work-items.ts`](../../src/types/work-i
 
 ## Lifecycle
 
-`WorkItemStatus` (the discriminated union enforced by TS and validated at runtime):
+`WorkItemStatus` (the discriminated union enforced by TypeScript everywhere it's typed; the scenario validator now also rejects unknown values on `scenario.initialWorkItem.status` to catch external JSON fixtures that drift):
 
 | Status | Set by | Meaning |
 | --- | --- | --- |
