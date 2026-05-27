@@ -2,6 +2,8 @@ import type { AgentId, AgentStatus } from "@/types/agents";
 import type { RoomId } from "@/types/rooms";
 import type { ADLCMode } from "@/types/adlc";
 import type { Scenario } from "@/data/scenarios";
+import type { WorkItem, WorkItemKind, WorkItemStatus } from "@/types/work-items";
+import type { WorkflowEventType } from "@/types/workflow-events";
 
 const VALID_AGENTS = new Set<AgentId>([
   "cora", "piper", "nova", "theo", "iris", "mira", "tess", "rune",
@@ -26,6 +28,36 @@ const VALID_ACTORS = new Set<string>([
   ...VALID_AGENTS, "human", "system",
 ]);
 
+const VALID_WORK_ITEM_KINDS = new Set<WorkItemKind>([
+  "feature", "bug", "research", "task",
+]);
+
+const VALID_WORK_ITEM_STATUSES = new Set<WorkItemStatus>([
+  "captured", "refined", "researching", "planning", "designing", "building",
+  "validating", "reviewing", "awaiting_human", "done",
+]);
+
+const VALID_EVENT_TYPES = new Set<WorkflowEventType>([
+  "run.started", "run.paused", "run.completed",
+  "work_item.created", "work_item.refined", "work_item.owner.changed",
+  "work_item.mode.changed", "work_item.completed",
+  "agent.started", "agent.finished", "agent.status.changed",
+  "agent.moved", "agent.message.sent",
+  "room.entered", "room.exited",
+  "handoff.requested", "handoff.accepted", "handoff.completed",
+  "artifact.produced",
+  "decision.requested", "decision.resolved",
+  "blocker.raised", "blocker.cleared",
+  "quality_gate.passed", "quality_gate.failed",
+  "approval.requested", "approval.resolved",
+  "meeting.started", "meeting.ended",
+  "permission.bumped", "permission.expired",
+]);
+
+const ISO_8601_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:?\d{2})$/;
+const isIsoTimestamp = (v: unknown): v is string =>
+  typeof v === "string" && ISO_8601_RE.test(v) && !Number.isNaN(Date.parse(v));
+
 export interface ValidationIssue {
   scenarioId: string;
   eventId: string;
@@ -47,6 +79,11 @@ export function validateScenario(scenario: Scenario): ValidationIssue[] {
 
   const push = (eventId: string, eventIndex: number, message: string) =>
     issues.push({ scenarioId: scenario.id, eventId, eventIndex, message });
+
+  // --- Initial work item validation ---
+  // Important for observed scenarios loaded from external JSON: TS only types
+  // the import, the field values are still trusted-by-default unless we check.
+  validateInitialWorkItem(scenario.initialWorkItem, push);
 
   // --- Chain validation ---
   if (!Array.isArray(scenario.chain) || scenario.chain.length === 0) {
@@ -90,6 +127,14 @@ export function validateScenario(scenario: Scenario): ValidationIssue[] {
 
   scenario.events.forEach((event, i) => {
     const eid = event.id;
+
+    // Reject unknown event.type strings outright. TS only catches this for
+    // statically-typed scenarios; for external fixtures (real Claude Code
+    // sessions, eventually) the type is whatever the JSON says it is.
+    if (!VALID_EVENT_TYPES.has(event.type as WorkflowEventType)) {
+      push(eid, i, `unknown event.type: ${event.type}`);
+      return;
+    }
 
     // Actor must be a known agent, "human", or "system"
     if (!VALID_ACTORS.has(event.actor)) {
@@ -203,4 +248,68 @@ export function validateScenario(scenario: Scenario): ValidationIssue[] {
   }
 
   return issues;
+}
+
+type IssuePusher = (eventId: string, eventIndex: number, message: string) => void;
+
+/**
+ * Validate `scenario.initialWorkItem` against the WorkItem type's runtime
+ * unions. Mostly a no-op for our scripted scenarios — they're hand-rolled
+ * TS objects so values can only drift via deliberate refactor. The check
+ * matters most for observed scenarios where the work item is loaded from
+ * external JSON: TypeScript types only verify the shape of the import, not
+ * the values inside it.
+ *
+ * Field reasoning:
+ *
+ * - `id`, `title` — required non-empty strings; the UI shows them and they
+ *   anchor every artifact / decision back to the work item.
+ * - `kind`, `status`, `currentMode` — discriminated unions; anything outside
+ *   the type's allowed values would break the reducer or the UI.
+ * - `ownerAgentId`, `nextAgentId`, `assignedAgentIds[]` — agent IDs must be
+ *   real or `agents.find()` will return undefined and the UI will crash.
+ * - `createdAt`, `updatedAt` — ISO 8601 UTC. The activity log sorts and
+ *   formats from these.
+ */
+function validateInitialWorkItem(wi: WorkItem, push: IssuePusher): void {
+  if (typeof wi.id !== "string" || wi.id.length === 0) {
+    push("n/a", -1, "initialWorkItem.id must be a non-empty string");
+  }
+  if (typeof wi.title !== "string" || wi.title.length === 0) {
+    push("n/a", -1, "initialWorkItem.title must be a non-empty string");
+  }
+
+  if (!VALID_WORK_ITEM_KINDS.has(wi.kind)) {
+    push("n/a", -1, `initialWorkItem.kind: unknown value '${wi.kind}'`);
+  }
+  if (!VALID_WORK_ITEM_STATUSES.has(wi.status)) {
+    push("n/a", -1, `initialWorkItem.status: unknown value '${wi.status}'`);
+  }
+  if (!VALID_MODES.has(wi.currentMode)) {
+    push("n/a", -1, `initialWorkItem.currentMode: unknown value '${wi.currentMode}'`);
+  }
+
+  if (wi.ownerAgentId !== null && !VALID_AGENTS.has(wi.ownerAgentId)) {
+    push("n/a", -1, `initialWorkItem.ownerAgentId: unknown agent '${wi.ownerAgentId}'`);
+  }
+  if (wi.nextAgentId !== null && !VALID_AGENTS.has(wi.nextAgentId)) {
+    push("n/a", -1, `initialWorkItem.nextAgentId: unknown agent '${wi.nextAgentId}'`);
+  }
+
+  if (!Array.isArray(wi.assignedAgentIds)) {
+    push("n/a", -1, "initialWorkItem.assignedAgentIds must be an array");
+  } else {
+    wi.assignedAgentIds.forEach((id, idx) => {
+      if (!VALID_AGENTS.has(id)) {
+        push("n/a", -1, `initialWorkItem.assignedAgentIds[${idx}]: unknown agent '${id}'`);
+      }
+    });
+  }
+
+  if (!isIsoTimestamp(wi.createdAt)) {
+    push("n/a", -1, `initialWorkItem.createdAt: not a valid ISO 8601 timestamp ('${wi.createdAt}')`);
+  }
+  if (!isIsoTimestamp(wi.updatedAt)) {
+    push("n/a", -1, `initialWorkItem.updatedAt: not a valid ISO 8601 timestamp ('${wi.updatedAt}')`);
+  }
 }

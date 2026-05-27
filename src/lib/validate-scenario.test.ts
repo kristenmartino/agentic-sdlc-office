@@ -127,4 +127,141 @@ describe("validateScenario", () => {
     const issues = validateScenario(bad);
     expect(issues.some((i) => i.message.includes("observer mode is read-only"))).toBe(true);
   });
+
+  it("flags unknown event.type strings (catches external fixture drift)", () => {
+    // Cast through unknown to simulate a JSON-loaded event whose `type`
+    // field doesn't match any known WorkflowEventType. TS can't see this
+    // across an import boundary; the validator now catches it at runtime.
+    const rogueEvent = {
+      id: "evt_unknown_type",
+      ts: "2026-05-27T14:31:00.000Z",
+      actor: "mira",
+      type: "agent.broke.something",
+      subject: "mira",
+      payload: {},
+    } as unknown as Scenario["events"][number];
+
+    const bad: Scenario = {
+      ...SCENARIOS["observed-sample"],
+      events: [...SCENARIOS["observed-sample"].events, rogueEvent],
+    };
+    const issues = validateScenario(bad);
+    expect(issues.some((i) => i.message.includes("unknown event.type: agent.broke.something"))).toBe(true);
+  });
+});
+
+describe("validateScenario — initialWorkItem fields", () => {
+  it("flags an empty work item id", () => {
+    const bad: Scenario = {
+      ...SCENARIOS["observed-sample"],
+      initialWorkItem: { ...SCENARIOS["observed-sample"].initialWorkItem, id: "" },
+    };
+    const issues = validateScenario(bad);
+    expect(issues.some((i) => i.message.includes("initialWorkItem.id must be a non-empty string"))).toBe(true);
+  });
+
+  it("flags an empty title", () => {
+    const bad: Scenario = {
+      ...SCENARIOS["observed-sample"],
+      initialWorkItem: { ...SCENARIOS["observed-sample"].initialWorkItem, title: "" },
+    };
+    const issues = validateScenario(bad);
+    expect(issues.some((i) => i.message.includes("initialWorkItem.title must be a non-empty string"))).toBe(true);
+  });
+
+  it("flags an unknown WorkItemKind", () => {
+    const bad: Scenario = {
+      ...SCENARIOS["observed-sample"],
+      // @ts-expect-error — intentionally bad value to simulate external JSON
+      initialWorkItem: { ...SCENARIOS["observed-sample"].initialWorkItem, kind: "epic" },
+    };
+    const issues = validateScenario(bad);
+    expect(issues.some((i) => i.message.includes("initialWorkItem.kind: unknown value 'epic'"))).toBe(true);
+  });
+
+  it("flags an unknown WorkItemStatus", () => {
+    const bad: Scenario = {
+      ...SCENARIOS["observed-sample"],
+      // @ts-expect-error — intentionally bad value
+      initialWorkItem: { ...SCENARIOS["observed-sample"].initialWorkItem, status: "wip" },
+    };
+    const issues = validateScenario(bad);
+    expect(issues.some((i) => i.message.includes("initialWorkItem.status: unknown value 'wip'"))).toBe(true);
+  });
+
+  it("flags an unknown ADLC mode", () => {
+    const bad: Scenario = {
+      ...SCENARIOS["observed-sample"],
+      // @ts-expect-error — intentionally bad value
+      initialWorkItem: { ...SCENARIOS["observed-sample"].initialWorkItem, currentMode: "Discovery" },
+    };
+    const issues = validateScenario(bad);
+    expect(issues.some((i) => i.message.includes("initialWorkItem.currentMode: unknown value 'Discovery'"))).toBe(true);
+  });
+
+  it("flags an unknown ownerAgentId", () => {
+    const bad: Scenario = {
+      ...SCENARIOS["observed-sample"],
+      // @ts-expect-error — intentionally bad value
+      initialWorkItem: { ...SCENARIOS["observed-sample"].initialWorkItem, ownerAgentId: "bogus" },
+    };
+    const issues = validateScenario(bad);
+    expect(issues.some((i) => i.message.includes("initialWorkItem.ownerAgentId: unknown agent 'bogus'"))).toBe(true);
+  });
+
+  it("flags an unknown nextAgentId", () => {
+    const bad: Scenario = {
+      ...SCENARIOS["observed-sample"],
+      // @ts-expect-error — intentionally bad value
+      initialWorkItem: { ...SCENARIOS["observed-sample"].initialWorkItem, nextAgentId: "bogus" },
+    };
+    const issues = validateScenario(bad);
+    expect(issues.some((i) => i.message.includes("initialWorkItem.nextAgentId: unknown agent 'bogus'"))).toBe(true);
+  });
+
+  it("flags unknown agent IDs in assignedAgentIds", () => {
+    const bad: Scenario = {
+      ...SCENARIOS["observed-sample"],
+      initialWorkItem: {
+        ...SCENARIOS["observed-sample"].initialWorkItem,
+        // @ts-expect-error — intentionally bad value
+        assignedAgentIds: ["mira", "bogus"],
+      },
+    };
+    const issues = validateScenario(bad);
+    expect(issues.some((i) => i.message.includes("initialWorkItem.assignedAgentIds[1]: unknown agent 'bogus'"))).toBe(true);
+  });
+
+  it("flags a non-ISO createdAt timestamp", () => {
+    const bad: Scenario = {
+      ...SCENARIOS["observed-sample"],
+      initialWorkItem: {
+        ...SCENARIOS["observed-sample"].initialWorkItem,
+        createdAt: "yesterday at 4pm",
+      },
+    };
+    const issues = validateScenario(bad);
+    expect(issues.some((i) => i.message.includes("initialWorkItem.createdAt: not a valid ISO 8601 timestamp"))).toBe(true);
+  });
+
+  it("flags a non-ISO updatedAt timestamp", () => {
+    const bad: Scenario = {
+      ...SCENARIOS["observed-sample"],
+      initialWorkItem: {
+        ...SCENARIOS["observed-sample"].initialWorkItem,
+        updatedAt: "2026/05/27",
+      },
+    };
+    const issues = validateScenario(bad);
+    expect(issues.some((i) => i.message.includes("initialWorkItem.updatedAt: not a valid ISO 8601 timestamp"))).toBe(true);
+  });
+
+  it("a null ownerAgentId is allowed (pre-handoff state)", () => {
+    const ok: Scenario = {
+      ...SCENARIOS["observed-sample"],
+      initialWorkItem: { ...SCENARIOS["observed-sample"].initialWorkItem, ownerAgentId: null },
+    };
+    const issues = validateScenario(ok);
+    expect(issues.some((i) => i.message.includes("ownerAgentId"))).toBe(false);
+  });
 });

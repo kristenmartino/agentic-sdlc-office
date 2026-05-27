@@ -28,7 +28,7 @@ The payload is loosely typed at the boundary but narrowed in the reducer per eve
 
 ## Event taxonomy
 
-Twelve categories. The validator allows exactly these; new types must be added to `WorkflowEventType` and the reducer's switch before they can be emitted.
+Twelve categories. The validator rejects any `event.type` outside this set at runtime — so JSON fixtures loaded from disk can't sneak unknown types past TypeScript. New types must be added to `WorkflowEventType`, to `VALID_EVENT_TYPES` in the validator, and to the reducer's switch before they can be emitted.
 
 | Category | Types | Reducer behavior |
 | --- | --- | --- |
