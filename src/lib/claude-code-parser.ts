@@ -2,6 +2,11 @@ import type { WorkflowEvent } from "@/types/workflow-events";
 import type { WorkItem } from "@/types/work-items";
 import type { AgentId } from "@/types/agents";
 import { isKnownAgentId } from "./runtime-unions";
+import {
+  parseRawTranscript,
+  validateRawTranscript,
+} from "./claude-code-transcript";
+import { mapTranscriptToSession } from "./claude-code-transcript-mapper";
 
 /**
  * Claude Code session parser — v0.2 stub.
@@ -74,24 +79,34 @@ export class ClaudeCodeParserNotImplementedError extends Error {
 }
 
 /**
- * Parse a raw Claude Code transcript file (JSONL) into a ParsedClaudeCodeSession.
+ * Parse a Claude Code transcript file (JSONL on disk) into a
+ * `ParsedClaudeCodeSession` that drops straight into the scenario registry.
  *
- * The JSONL → raw lines half is implemented: callers can use
- * `parseRawTranscript()` from `claude-code-transcript.ts` to get a typed
- * `RawTranscriptLine[]`. What still throws is the *mapping* step from
- * those raw lines to office events — choosing an office agent, deciding
- * which tool_uses become artifacts, etc.
+ * Pipeline:
+ *   1. `parseRawTranscript()` — JSONL → typed `RawTranscriptLine[]`.
+ *      Throws with a line number on malformed JSON.
+ *   2. `validateRawTranscript()` — strict shape check. Throws here if any
+ *      line is malformed; partial mapping would leak silently otherwise.
+ *   3. `mapTranscriptToSession()` — maps raw lines to office events per
+ *      the rules in [`docs/architecture/claude-code-transcript-format.md`](../../docs/architecture/claude-code-transcript-format.md).
  *
- * The shape of the input is documented in
- * [`docs/architecture/claude-code-transcript-format.md`](../../docs/architecture/claude-code-transcript-format.md).
+ * Input shape: see [`src/types/claude-code-transcript.ts`](../types/claude-code-transcript.ts).
  *
- * v0.2: implement the mapping. v0.1: throws so callers can't depend on
- * output that doesn't exist yet.
+ * Read-only: the parser doesn't touch the file system beyond the string
+ * its caller hands it, doesn't issue network calls, doesn't write to
+ * GitHub or run any subprocess.
  */
-export function parseClaudeCodeTranscript(_rawJsonl: string): ParsedClaudeCodeSession {
-  throw new ClaudeCodeParserNotImplementedError(
-    "raw lines → WorkflowEvent[] mapping is a v0.2 task — JSONL parsing itself works via parseRawTranscript()",
-  );
+export function parseClaudeCodeTranscript(rawJsonl: string): ParsedClaudeCodeSession {
+  const lines = parseRawTranscript(rawJsonl);
+  const issues = validateRawTranscript(lines);
+  if (issues.length > 0) {
+    const first = issues[0];
+    throw new Error(
+      `Claude Code transcript has ${issues.length} validation issue${issues.length === 1 ? "" : "s"}; ` +
+      `first: line ${first.lineIndex} ${first.field}: ${first.message}`,
+    );
+  }
+  return mapTranscriptToSession(lines);
 }
 
 /**
