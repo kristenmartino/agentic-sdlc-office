@@ -5,6 +5,12 @@ so the office can render real sessions instead of scripted scenarios. This
 doc is a v0.1 spike snapshot, not a formal schema — when Anthropic
 publishes an official transcript spec, this file should be replaced.
 
+> **Reality check against a real session:** see
+> [`real-transcript-discovery.md`](real-transcript-discovery.md) for the
+> field-by-field diff between this doc's assumptions and what an actual
+> Claude Code transcript on disk contains. Several line types and a
+> structured `toolUseResult` field were missed in the initial pass.
+
 ## Where it lives
 
 Claude Code persists each session as a JSONL file under:
