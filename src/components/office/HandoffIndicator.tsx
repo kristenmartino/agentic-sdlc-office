@@ -10,13 +10,9 @@ export default function HandoffIndicator() {
 
   const fromId = workItem.ownerAgentId;
   const toId = workItem.nextAgentId;
-  // Only render during the window between handoff.requested and work_item.owner.changed
   const inFlight = Boolean(fromId && toId);
 
-  const lastArtifact = artifacts
-    .filter((a) => a.workItemId === workItem.id)
-    .slice(-1)[0];
-
+  const lastArtifact = artifacts.filter((a) => a.workItemId === workItem.id).slice(-1)[0];
   const fromAgent = fromId ? MOCK_AGENTS.find((a) => a.id === fromId) : null;
   const toAgent = toId ? MOCK_AGENTS.find((a) => a.id === toId) : null;
 
@@ -24,44 +20,49 @@ export default function HandoffIndicator() {
     <AnimatePresence>
       {inFlight && fromAgent && toAgent && (
         <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: 8 }}
-          transition={{ duration: 0.18 }}
-          className="rounded-lg border border-office-line bg-office-panel/80 px-3 py-2 flex items-center gap-3 text-[11px]"
+          initial={{ opacity: 0, y: 12, scale: 0.97 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={{ opacity: 0, y: 12, scale: 0.97 }}
+          transition={{ duration: 0.22, ease: "easeOut" }}
+          className="rounded-lg border border-cora/40 bg-gradient-to-r from-office-panel via-office-panel to-amber-950/30 px-4 py-3 flex items-center gap-4 shadow-[0_0_20px_rgba(230,162,60,0.08)]"
           role="status"
           aria-label="Handoff in progress"
         >
-          <span className="text-office-muted uppercase tracking-wide text-[9px]">Handoff in flight</span>
-          <AgentPill name={fromAgent.name} color={AGENT_COLORS[fromAgent.id]} />
-          <motion.span
-            className="font-mono"
-            animate={{ x: [0, 4, 0] }}
-            transition={{ repeat: Infinity, duration: 1.2, ease: "easeInOut" }}
-          >
-            →
-          </motion.span>
-          <AgentPill name={toAgent.name} color={AGENT_COLORS[toAgent.id]} />
-          {lastArtifact && (
-            <span className="ml-auto text-office-muted font-mono">
-              {lastArtifact.kind}
+          <div className="flex flex-col">
+            <span className="text-cora uppercase tracking-wider text-[9px] font-semibold">
+              ⇢ Handoff in flight
             </span>
-          )}
+            {lastArtifact && (
+              <span className="text-office-muted text-[10px] font-mono mt-0.5">
+                {lastArtifact.kind} · {lastArtifact.summary.slice(0, 60)}
+                {lastArtifact.summary.length > 60 ? "…" : ""}
+              </span>
+            )}
+          </div>
+          <div className="flex-1 flex items-center justify-end gap-3">
+            <AgentPill name={fromAgent.name} color={AGENT_COLORS[fromAgent.id]} role={fromAgent.role} />
+            <motion.span
+              className="font-mono text-cora text-lg"
+              animate={{ x: [0, 6, 0] }}
+              transition={{ repeat: Infinity, duration: 1.4, ease: "easeInOut" }}
+              aria-hidden
+            >
+              →
+            </motion.span>
+            <AgentPill name={toAgent.name} color={AGENT_COLORS[toAgent.id]} role={toAgent.role} />
+          </div>
         </motion.div>
       )}
     </AnimatePresence>
   );
 }
 
-function AgentPill({ name, color }: { name: string; color: string }) {
+function AgentPill({ name, color, role }: { name: string; color: string; role: string }) {
   return (
-    <span className="inline-flex items-center gap-1.5">
-      <span
-        className="w-2.5 h-2.5 rounded-sm"
-        style={{ backgroundColor: color }}
-        aria-hidden
-      />
-      <span className="font-mono">{name}</span>
+    <span className="inline-flex items-center gap-2 px-2 py-1 rounded-md bg-office-panel/80 border border-office-line">
+      <span className="w-3 h-3 rounded" style={{ backgroundColor: color }} aria-hidden />
+      <span className="text-xs font-semibold text-office-text">{name}</span>
+      <span className="text-[9px] text-office-muted hidden sm:inline">{role.split("/")[0].trim()}</span>
     </span>
   );
 }

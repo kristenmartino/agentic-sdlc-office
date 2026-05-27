@@ -20,10 +20,13 @@ export default function Page() {
   const decisions = useOfficeStore((s) => s.decisions);
   const openDecisions = decisions.filter((d) => !d.resolved).length;
 
+  const runState = useOfficeStore((s) => s.runState);
+
   const scenario = SCENARIOS[scenarioId];
   const isIncident = scenario.kind === "bug";
   const runHasStarted = log.length > 0;
   const showIncidentBanner = isIncident && runHasStarted;
+  const showIdleHero = !runHasStarted && runState === "idle";
 
   return (
     <main className={`min-h-screen p-6 max-w-[1280px] mx-auto transition-colors ${
@@ -58,6 +61,29 @@ export default function Page() {
           <DemoControls />
         </div>
       </header>
+
+      {showIdleHero && (
+        <div className="mb-4 rounded-lg border border-cora/30 bg-gradient-to-r from-cora/5 via-iris/5 to-office-panel/40 p-4 flex items-center gap-4">
+          <div className="flex-1">
+            <p className="text-sm font-medium text-office-text">
+              Ready to play <span className="font-mono text-cora">{scenario.title}</span>
+            </p>
+            <p className="text-[11px] text-office-muted mt-1">
+              {scenario.subtitle} ·{" "}
+              <span className="font-mono">{scenario.events.length} events</span>,{" "}
+              ~{Math.ceil((scenario.events.length * 1.4) / 60)} min including pauses.
+            </p>
+            <p className="text-[10px] text-amber-300/80 mt-2">
+              Click <span className="font-mono">Start Demo</span> above to begin. The Decision Inbox will
+              flag when the office needs you.
+            </p>
+          </div>
+          <div className="hidden sm:flex flex-col items-end gap-1 text-[10px] text-office-muted shrink-0">
+            <span className="font-mono">8 agents · 8 rooms</span>
+            <span className="font-mono">{scenario.kind === "bug" ? "incident" : "feature"} flow</span>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-[1fr_320px] gap-4">
         <div className="flex flex-col gap-4">
