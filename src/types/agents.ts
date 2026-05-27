@@ -14,11 +14,30 @@ export type AgentId =
 export type AgentStatus =
   | "idle"
   | "thinking"
-  | "working"
+  | "reading"
+  | "planning"
+  | "designing"
+  | "coding"
+  | "testing"
+  | "reviewing"
   | "talking"
+  | "meeting"
+  | "waiting_on_agent"
+  | "waiting_on_human"
   | "blocked"
-  | "escalating"
-  | "celebrating";
+  | "done"
+  | "failed";
+
+export type PermissionLevel =
+  | "P0"
+  | "P1"
+  | "P2"
+  | "P3"
+  | "P4"
+  | "P5"
+  | "P6"
+  | "P7"
+  | "human-only";
 
 export interface AgentInstance {
   id: AgentId;
@@ -28,4 +47,12 @@ export interface AgentInstance {
   primaryModes: ADLCMode[];
   currentRoom: RoomId;
   status: AgentStatus;
+  permissionLevel: PermissionLevel;
+  assignedWorkItemId: string | null;
+  currentArtifactId: string | null;
+  blockedBy: string | null;
+  waitingOn: AgentId | "human" | null;
+  nextAgentId: AgentId | null;
+  lastAction: string | null;
+  message: string | null;
 }
