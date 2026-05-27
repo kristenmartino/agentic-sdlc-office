@@ -1,7 +1,10 @@
 import type { AgentId } from "@/types/agents";
 import type {
   ContentBlock,
+  RawAiTitleLine,
   RawAssistantMessage,
+  RawCustomTitleLine,
+  RawPrLinkLine,
   RawSummaryLine,
   RawSystemMessage,
   RawTranscriptLine,
@@ -14,6 +17,74 @@ import type { Artifact, WorkItem } from "@/types/work-items";
 import type { QualityGate } from "@/types/governance";
 import type { WorkflowEvent } from "@/types/workflow-events";
 import type { ParsedClaudeCodeSession } from "./claude-code-parser";
+
+/**
+ * Narrowing helpers for the unknown `toolUseResult` sibling field that real
+ * Claude Code transcripts attach to user lines carrying tool_results. Each
+ * helper picks only the fields we actually need; nothing here exposes
+ * `oldString` / `newString` / `originalFile` / `structuredPatch` raw content
+ * to a renderable surface — they're inspected only for derived metadata
+ * (line counts, success/failure heuristics).
+ */
+
+interface BashLikeToolUseResult {
+  stdout?: string;
+  stderr?: string;
+  interrupted?: boolean;
+  noOutputExpected?: boolean;
+}
+
+interface EditLikeToolUseResult {
+  filePath?: string;
+  oldString?: string;
+  newString?: string;
+  structuredPatch?: unknown;
+  userModified?: boolean;
+  replaceAll?: boolean;
+}
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function asBashToolUseResult(value: unknown): BashLikeToolUseResult | undefined {
+  if (!isObject(value)) return undefined;
+  // Heuristic: it's "Bash-shaped" if any of these telltale fields exist.
+  if (!("stdout" in value) && !("stderr" in value) && !("interrupted" in value)) {
+    return undefined;
+  }
+  const v = value;
+  return {
+    stdout: typeof v.stdout === "string" ? v.stdout : undefined,
+    stderr: typeof v.stderr === "string" ? v.stderr : undefined,
+    interrupted: typeof v.interrupted === "boolean" ? v.interrupted : undefined,
+    noOutputExpected: typeof v.noOutputExpected === "boolean" ? v.noOutputExpected : undefined,
+  };
+}
+
+function asEditToolUseResult(value: unknown): EditLikeToolUseResult | undefined {
+  if (!isObject(value)) return undefined;
+  if (!("filePath" in value) && !("structuredPatch" in value)) return undefined;
+  const v = value;
+  return {
+    filePath: typeof v.filePath === "string" ? v.filePath : undefined,
+    // We deliberately don't surface oldString/newString/originalFile content;
+    // structuredPatch is kept opaque (used only for line-count heuristics).
+    structuredPatch: v.structuredPatch,
+    userModified: typeof v.userModified === "boolean" ? v.userModified : undefined,
+    replaceAll: typeof v.replaceAll === "boolean" ? v.replaceAll : undefined,
+  };
+}
+
+/**
+ * Count changed hunks in a structured patch without exposing content. Returns
+ * `undefined` if the shape doesn't match what we expect (different versions
+ * of Claude Code may use different patch shapes).
+ */
+function countPatchHunks(structuredPatch: unknown): number | undefined {
+  if (!Array.isArray(structuredPatch)) return undefined;
+  return structuredPatch.length;
+}
 
 /**
  * Map a parsed Claude Code transcript into a `ParsedClaudeCodeSession`.
@@ -127,15 +198,20 @@ export function mapTranscriptToSession(
       case "summary":
         // Summary is informational — title hint only, no event.
         break;
-      // The following six types are accepted (no longer rejected by the
-      // validator) but the mapper currently walks past them as no-ops.
-      // PR #46 will consume `pr-link` as `artifact.produced` and use
-      // `ai-title` / `custom-title` for title fallback. Attachments are
-      // never rendered by default for privacy reasons.
+      case "pr-link":
+        // PR #24 consumes pr-link → artifact.produced. The seed phase
+        // already used custom-title / ai-title for the work item title;
+        // here we surface the PR itself as an artifact attached to the
+        // work item.
+        mapPrLink(line, ctx);
+        break;
+      // ai-title / custom-title are consumed during work-item seeding,
+      // not during the walk. The remaining types are log-only by design:
+      // attachment content is opaque (privacy), last-prompt is a UUID
+      // pointer, queue-operation is internal queue state.
       case "ai-title":
       case "custom-title":
       case "last-prompt":
-      case "pr-link":
       case "attachment":
       case "queue-operation":
         break;
@@ -192,18 +268,9 @@ function mapAssistantToolUse(tu: ToolUseBlock, ctx: MapperContext): void {
     return;
   }
   if (EDIT_TOOLS.has(tu.name)) {
+    // Status flips immediately, but the artifact is emitted at tool_result
+    // time when we know the edit actually applied. Tracked via toolUseLookup.
     ctx.setStatus("coding", `${tu.name} ${shortInputPreview(tu)}`);
-    const filePath = (tu.input as { file_path?: string }).file_path;
-    const artifact: Artifact = {
-      id: `art_${ctx.session.sessionId}_${ctx.nextArtifactN()}`,
-      workItemId: ctx.workItem.id,
-      producedBy: DEFAULT_AGENT,
-      kind: "code_pr",
-      ref: filePath ?? "<unknown file>",
-      summary: `${tu.name}: ${filePath ?? "edit"}`,
-      ts: ctx.lastTimestamp(),
-    };
-    ctx.emit("artifact.produced", DEFAULT_AGENT, ctx.workItem.id, { artifact });
     return;
   }
   if (tu.name === BASH_TOOL) {
@@ -239,22 +306,43 @@ function mapUserLine(
     return;
   }
 
+  // toolUseResult (when present) carries the structured-data sibling of
+  // tool_result.content. Each tool_result block in this line shares the
+  // same toolUseResult — there's only one per user line in practice.
+  const toolUseResult = (line as RawUserMessage).toolUseResult;
+
   for (const block of line.message.content) {
     if (block.type !== "tool_result") continue;
     const tr = block as ToolResultBlock;
     const tu = toolUseLookup.get(tr.tool_use_id);
-    mapToolResult(tr, tu, ctx);
+    mapToolResult(tr, tu, toolUseResult, ctx);
   }
 }
 
 function mapToolResult(
   tr: ToolResultBlock,
   tu: ToolUseBlock | undefined,
+  toolUseResult: unknown,
   ctx: MapperContext,
 ): void {
   const isBash = tu?.name === BASH_TOOL;
-  const wasTestCommand = isBash && isTestCommand((tu?.input as { command?: string } | undefined)?.command);
-  const failed = tr.is_error === true;
+  const isEdit = tu ? EDIT_TOOLS.has(tu.name) : false;
+  const command = (tu?.input as { command?: string } | undefined)?.command;
+  const wasTestCommand = isBash && isTestCommand(command);
+
+  // Failure detection: PR #46 broadened this beyond `is_error: true`.
+  // Real transcripts often signal Bash failure via stderr / interrupted on
+  // toolUseResult, not via is_error. See real-transcript-discovery.md
+  // (only 39 of 1187 results in the sampled session had is_error: true).
+  const bashResult = isBash ? asBashToolUseResult(toolUseResult) : undefined;
+  const interrupted = bashResult?.interrupted === true;
+  const stderrIndicatesFailure =
+    isBash &&
+    typeof bashResult?.stderr === "string" &&
+    bashResult.stderr.trim().length > 0 &&
+    looksLikeStderrFailure(bashResult.stderr);
+
+  const failed = tr.is_error === true || interrupted || stderrIndicatesFailure;
 
   if (failed) {
     const gate: QualityGate = {
@@ -263,7 +351,7 @@ function mapToolResult(
       name: tu ? `${tu.name} result` : "Tool result",
       owner: DEFAULT_AGENT,
       status: "failed",
-      notes: trimmedContent(tr.content),
+      notes: failureNotes({ tr, bashResult, interrupted, stderrIndicatesFailure }),
     };
     ctx.emit("quality_gate.failed", DEFAULT_AGENT, ctx.workItem.id, { gate });
     ctx.setStatus("failed", `${tu?.name ?? "Tool"} failed`);
@@ -274,16 +362,76 @@ function mapToolResult(
     const gate: QualityGate = {
       id: `gate_${ctx.session.sessionId}_${ctx.nextGateN()}`,
       workItemId: ctx.workItem.id,
-      name: `${tu?.name ?? "Bash"}: ${truncate((tu?.input as { command?: string } | undefined)?.command ?? "", 60)}`,
+      name: `${tu?.name ?? "Bash"}: ${truncate(command ?? "", 60)}`,
       owner: DEFAULT_AGENT,
       status: "passed",
+      // For passed gates, the model-visible content is fine — it's the
+      // tool's summary of its own output, not arbitrary file content.
       notes: trimmedContent(tr.content),
     };
     ctx.emit("quality_gate.passed", DEFAULT_AGENT, ctx.workItem.id, { gate });
     return;
   }
 
-  // Reads, edits, non-test bash success: log-only.
+  if (isEdit) {
+    // Now that the edit has applied, emit the artifact. Prefer the path
+    // from toolUseResult (authoritative — confirms what got written) over
+    // tool_use.input.file_path (the model's request).
+    const editResult = asEditToolUseResult(toolUseResult);
+    const filePath =
+      editResult?.filePath ?? (tu?.input as { file_path?: string } | undefined)?.file_path;
+    const hunks = editResult ? countPatchHunks(editResult.structuredPatch) : undefined;
+
+    const summaryParts: string[] = [`${tu?.name ?? "Edit"}: ${filePath ?? "<unknown file>"}`];
+    if (typeof hunks === "number") summaryParts.push(`${hunks} hunk${hunks === 1 ? "" : "s"}`);
+    if (editResult?.replaceAll) summaryParts.push("replaceAll");
+
+    const artifact: Artifact = {
+      id: `art_${ctx.session.sessionId}_${ctx.nextArtifactN()}`,
+      workItemId: ctx.workItem.id,
+      producedBy: DEFAULT_AGENT,
+      kind: "code_pr",
+      ref: filePath ?? "<unknown file>",
+      summary: summaryParts.join(" — "),
+      ts: ctx.lastTimestamp(),
+    };
+    ctx.emit("artifact.produced", DEFAULT_AGENT, ctx.workItem.id, { artifact });
+    return;
+  }
+
+  // Reads, non-test bash success, anything else: log-only.
+}
+
+/**
+ * Common stderr patterns that indicate a real failure (vs. warning chatter).
+ * Conservative on purpose — false positives flip the status to `failed`.
+ */
+const STDERR_FAILURE_PATTERNS: RegExp[] = [
+  /\berror\b/i,
+  /\bfailed\b/i,
+  /\bfailure\b/i,
+  /\bfatal\b/i,
+  /✗/,
+  /\bFAIL\b/,
+  /\bnot ok\b/i,
+];
+
+function looksLikeStderrFailure(stderr: string): boolean {
+  return STDERR_FAILURE_PATTERNS.some((re) => re.test(stderr));
+}
+
+function failureNotes(args: {
+  tr: ToolResultBlock;
+  bashResult: BashLikeToolUseResult | undefined;
+  interrupted: boolean;
+  stderrIndicatesFailure: boolean;
+}): string {
+  const { tr, bashResult, interrupted, stderrIndicatesFailure } = args;
+  if (interrupted) return "Interrupted before completion";
+  if (stderrIndicatesFailure && bashResult?.stderr) {
+    return truncate(bashResult.stderr.trim(), 240);
+  }
+  return trimmedContent(tr.content);
 }
 
 // ─── Work item seeding ───────────────────────────────────────────────────────
@@ -293,10 +441,33 @@ function seedWorkItem(rawLines: RawTranscriptLine[], ctx: MapperContext): void {
     (l): l is RawUserMessage =>
       l.type === "user" && typeof l.message.content === "string",
   );
-  if (!firstUser) return; // session opened with no prompt — leave workItem unseeded
+  const customTitle = rawLines.find(
+    (l): l is RawCustomTitleLine => l.type === "custom-title",
+  );
+  const aiTitle = rawLines.find(
+    (l): l is RawAiTitleLine => l.type === "ai-title",
+  );
 
-  const title = truncate((firstUser.message.content as string).trim(), 120);
-  ctx.firstPromptUuid = firstUser.uuid;
+  // Title hierarchy: custom-title > user prompt > ai-title > default.
+  // Custom-title is an explicit user override, so it wins. Failing that,
+  // the actual user prompt is most informative. ai-title is the fallback
+  // when there was no user-typed prompt (rare but possible).
+  let title: string | undefined;
+  if (customTitle?.customTitle) {
+    title = truncate(customTitle.customTitle.trim(), 120);
+  } else if (firstUser) {
+    title = truncate((firstUser.message.content as string).trim(), 120);
+  } else if (aiTitle?.aiTitle) {
+    title = truncate(aiTitle.aiTitle.trim(), 120);
+  }
+
+  if (!title && !firstUser) {
+    // No anchor for a work item at all. Leave unseeded — the session
+    // wraps up with run.started/run.completed only.
+    return;
+  }
+
+  ctx.firstPromptUuid = firstUser?.uuid;
   ctx.workItem.title = title || "Observed Claude Code session";
 
   ctx.emit("work_item.created", "human", ctx.workItem.id, {
@@ -317,6 +488,25 @@ function seedWorkItem(rawLines: RawTranscriptLine[], ctx: MapperContext): void {
   ctx.workItem.ownerAgentId = DEFAULT_AGENT;
   ctx.workItem.assignedAgentIds = [DEFAULT_AGENT];
   ctx.workItemSeeded = true;
+}
+
+function mapPrLink(line: RawPrLinkLine, ctx: MapperContext): void {
+  if (!ctx.workItemSeeded) return; // no work item to attach the PR to
+
+  const ref = line.prUrl;
+  const repo = line.prRepository;
+  const number =
+    typeof line.prNumber === "number" ? line.prNumber : String(line.prNumber);
+  const artifact: Artifact = {
+    id: `art_${ctx.session.sessionId}_${ctx.nextArtifactN()}`,
+    workItemId: ctx.workItem.id,
+    producedBy: DEFAULT_AGENT,
+    kind: "code_pr",
+    ref,
+    summary: `PR #${number} opened in ${repo}`,
+    ts: line.timestamp ?? ctx.lastTimestamp(),
+  };
+  ctx.emit("artifact.produced", DEFAULT_AGENT, ctx.workItem.id, { artifact });
 }
 
 // ─── Context (closure-style state for the walk) ──────────────────────────────

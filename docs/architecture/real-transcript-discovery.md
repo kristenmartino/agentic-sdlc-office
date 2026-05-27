@@ -201,6 +201,8 @@ In rough priority order (high → low):
 ## Status
 
 - ✅ Synthetic fixture proves the parser/validator/mapper round-trip end-to-end.
-- ✅ **Real session now accepts** — the 6 new line types and the additive envelope fields (including `caller` on tool_use and `toolUseResult` on user lines) are typed and validated as of PR #23 (#45 in reviewer numbering). Mapper walks past the new types as no-ops; behaviour change is the next PR's scope.
-- ⚠️ `toolUseResult` is *accepted* but not yet *consumed* — the mapper still only reads `tool_result.content`. Rich failure detection and structured artifacts come next.
-- ⏳ Next PR: consume `toolUseResult` for richer Bash failure detection + Edit/Write artifact metadata. After that, log-only handling for MCP/Task/AskUserQuestion/compact_boundary so the office surfaces what real sessions actually do.
+- ✅ **Real session shape accepts** (PR #45) — the 6 new line types and the additive envelope fields are typed and validated.
+- ✅ **`toolUseResult` consumed** (PR #46) — Bash failure detection now reads `stderr`/`interrupted`; Edit/Write/MultiEdit artifacts emit at tool_result time using `toolUseResult.filePath` and `structuredPatch` hunk counts (no raw oldString/newString rendered).
+- ✅ **`pr-link` → `artifact.produced`** (PR #46) — sessions that opened a PR now surface that PR in the activity log.
+- ✅ **Title hierarchy** (PR #46) — `custom-title` > first user prompt > `ai-title` > default placeholder.
+- ⏳ Next PR: log-only visibility for the high-signal unknown tools (MCP browser calls, `Task`/`TaskCreate`/`TaskUpdate`, `AskUserQuestion`, `compact_boundary`, `stop_hook_summary` with errors).

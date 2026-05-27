@@ -152,11 +152,12 @@ describe("mapTranscriptToSession — per-event mapping", () => {
     expect(status).toContain("reading");
   });
 
-  it("Edit tool_use → coding + artifact.produced", () => {
+  it("Edit tool_use → coding status immediately; artifact.produced emits when the result lands", () => {
     const session = mapTranscriptToSession([
       systemInit(),
       userPrompt("hello"),
       assistantToolUse("Edit", { file_path: "/tmp/Button.tsx", old_string: "a", new_string: "b" }, "e-1"),
+      toolResult("e-1", "Edit successful"),
     ]);
     const status = session.events
       .filter((e) => e.type === "agent.status.changed")
@@ -172,12 +173,31 @@ describe("mapTranscriptToSession — per-event mapping", () => {
     expect(session.workItem.artifactIds).toContain(art.id);
   });
 
-  it("Write and MultiEdit also produce artifacts", () => {
+  it("Edit tool_use without a tool_result → no artifact (edit didn't apply)", () => {
+    // PR #24 moved artifact emission to tool_result time, so an
+    // unmatched/interrupted Edit doesn't leak a phantom artifact.
+    const session = mapTranscriptToSession([
+      systemInit(),
+      userPrompt("hello"),
+      assistantToolUse("Edit", { file_path: "/tmp/Button.tsx" }, "e-1"),
+    ]);
+    const artifacts = session.events.filter((e) => e.type === "artifact.produced");
+    expect(artifacts).toHaveLength(0);
+    // Status still flips to coding — the model was *intending* to edit.
+    const status = session.events
+      .filter((e) => e.type === "agent.status.changed")
+      .map((e) => (e.payload as { to: string }).to);
+    expect(status).toContain("coding");
+  });
+
+  it("Write and MultiEdit also produce artifacts once their tool_results arrive", () => {
     const session = mapTranscriptToSession([
       systemInit(),
       userPrompt("hello"),
       assistantToolUse("Write", { file_path: "/tmp/new.ts" }, "w-1"),
+      toolResult("w-1", "Wrote /tmp/new.ts"),
       assistantToolUse("MultiEdit", { file_path: "/tmp/multi.ts", edits: [] }, "m-1"),
+      toolResult("m-1", "Edits applied"),
     ]);
     const artifacts = session.events.filter((e) => e.type === "artifact.produced");
     expect(artifacts).toHaveLength(2);
@@ -346,33 +366,207 @@ describe("mapper output structure", () => {
   });
 });
 
-describe("mapper — new line types pass through as no-ops", () => {
-  // PR #23 (#45 in reviewer numbering): the 6 new line types are accepted
-  // by the validator but the mapper walks past them. PR #46 will start
-  // consuming pr-link as an artifact and ai-title/custom-title as title
-  // fallbacks; until then, the mapper must not emit anything for them
-  // beyond the standard run.started + work_item.* + run.completed.
-  it("ai-title / custom-title / last-prompt / pr-link / attachment / queue-operation produce no extra events", () => {
-    const sessionWithoutNewTypes = mapTranscriptToSession([
-      systemInit(),
-      userPrompt("hello"),
-      assistantText("done"),
-    ]);
+describe("PR #24 — consume toolUseResult", () => {
+  function toolResultWithStructured(
+    toolUseId: string,
+    content: string,
+    structured: Record<string, unknown>,
+    isError = false,
+    ts = T0,
+  ): RawTranscriptLine {
+    return {
+      type: "user",
+      sessionId: SID,
+      timestamp: ts,
+      message: {
+        role: "user",
+        content: [{ type: "tool_result", tool_use_id: toolUseId, content, is_error: isError }],
+      },
+      toolUseResult: structured,
+    } as RawTranscriptLine;
+  }
 
-    const sessionWithNewTypes = mapTranscriptToSession([
+  it("Edit uses toolUseResult.filePath as the artifact ref (preferring over tool_use input)", () => {
+    const session = mapTranscriptToSession([
       systemInit(),
-      { type: "ai-title", aiTitle: "test session", sessionId: SID } as RawTranscriptLine,
-      { type: "custom-title", customTitle: "my session", sessionId: SID } as RawTranscriptLine,
+      userPrompt("refactor"),
+      // Input says one path, toolUseResult confirms another (rare in
+      // practice but the result is authoritative).
+      assistantToolUse("Edit", { file_path: "/tmp/Button.tsx" }, "e-1"),
+      toolResultWithStructured("e-1", "ok", {
+        filePath: "/Users/example/repo/src/Button.tsx",
+        structuredPatch: [{}, {}, {}],
+      }),
+    ]);
+    const artifact = (session.events.find((e) => e.type === "artifact.produced")
+      ?.payload as { artifact: Artifact }).artifact;
+    expect(artifact.ref).toBe("/Users/example/repo/src/Button.tsx");
+    expect(artifact.summary).toContain("3 hunks");
+  });
+
+  it("Edit summary notes replaceAll when toolUseResult.replaceAll is true", () => {
+    const session = mapTranscriptToSession([
+      systemInit(),
+      userPrompt("refactor"),
+      assistantToolUse("Edit", { file_path: "/tmp/x.ts" }, "e-1"),
+      toolResultWithStructured("e-1", "ok", {
+        filePath: "/tmp/x.ts",
+        replaceAll: true,
+      }),
+    ]);
+    const artifact = (session.events.find((e) => e.type === "artifact.produced")
+      ?.payload as { artifact: Artifact }).artifact;
+    expect(artifact.summary).toContain("replaceAll");
+  });
+
+  it("Bash interrupted: true → quality_gate.failed even without is_error", () => {
+    const session = mapTranscriptToSession([
+      systemInit(),
       userPrompt("hello"),
-      { type: "last-prompt", lastPrompt: "hello", leafUuid: "u-0001", sessionId: SID } as RawTranscriptLine,
-      assistantText("done"),
+      assistantToolUse("Bash", { command: "pnpm test" }, "b-1"),
+      toolResultWithStructured("b-1", "", {
+        stdout: "",
+        stderr: "",
+        interrupted: true,
+      }),
+    ]);
+    const failed = session.events.filter((e) => e.type === "quality_gate.failed");
+    expect(failed).toHaveLength(1);
+    expect((failed[0].payload as { gate: QualityGate }).gate.notes).toContain("Interrupted");
+  });
+
+  it("Bash stderr with failure language → quality_gate.failed even without is_error", () => {
+    const session = mapTranscriptToSession([
+      systemInit(),
+      userPrompt("hello"),
+      assistantToolUse("Bash", { command: "pnpm test" }, "b-1"),
+      toolResultWithStructured("b-1", "see stderr", {
+        stdout: "",
+        stderr: "Error: Test failed at line 12",
+      }),
+    ]);
+    const failed = session.events.filter((e) => e.type === "quality_gate.failed");
+    expect(failed).toHaveLength(1);
+    // Status flips to failed so the office UI shows the regression.
+    const status = session.events
+      .filter((e) => e.type === "agent.status.changed")
+      .map((e) => (e.payload as { to: string }).to);
+    expect(status).toContain("failed");
+  });
+
+  it("Bash stderr with benign warnings does NOT trigger quality_gate.failed", () => {
+    // Conservative regex — only flips on hard-failure language. A warning
+    // line with no error words should pass.
+    const session = mapTranscriptToSession([
+      systemInit(),
+      userPrompt("hello"),
+      assistantToolUse("Bash", { command: "pnpm test" }, "b-1"),
+      toolResultWithStructured("b-1", "tests passed", {
+        stdout: "all good",
+        stderr: "warning: deprecated option ignored",
+      }),
+    ]);
+    expect(session.events.find((e) => e.type === "quality_gate.failed")).toBeUndefined();
+    expect(session.events.find((e) => e.type === "quality_gate.passed")).toBeDefined();
+  });
+});
+
+describe("PR #24 — pr-link → artifact.produced", () => {
+  it("a pr-link line emits artifact.produced with kind=code_pr", () => {
+    const session = mapTranscriptToSession([
+      systemInit(),
+      userPrompt("ship the fix"),
       {
         type: "pr-link",
         prNumber: 42,
         prUrl: "https://github.com/example/repo/pull/42",
         prRepository: "example/repo",
         sessionId: SID,
+        timestamp: "2026-05-27T15:01:00.000Z",
       } as RawTranscriptLine,
+    ]);
+    const prArtifacts = session.events
+      .filter((e) => e.type === "artifact.produced")
+      .map((e) => (e.payload as { artifact: Artifact }).artifact)
+      .filter((a) => a.ref.includes("pull/42"));
+    expect(prArtifacts).toHaveLength(1);
+    expect(prArtifacts[0].kind).toBe("code_pr");
+    expect(prArtifacts[0].summary).toContain("#42");
+    expect(prArtifacts[0].summary).toContain("example/repo");
+  });
+
+  it("pr-link without a seeded work item is silently skipped (no artifact)", () => {
+    // No user prompt → workItem not seeded → no work item to attach to.
+    const session = mapTranscriptToSession([
+      systemInit(),
+      {
+        type: "pr-link",
+        prNumber: 1,
+        prUrl: "https://github.com/example/repo/pull/1",
+        prRepository: "example/repo",
+        sessionId: SID,
+      } as RawTranscriptLine,
+    ]);
+    expect(session.events.find((e) => e.type === "artifact.produced")).toBeUndefined();
+  });
+});
+
+describe("PR #24 — title hierarchy", () => {
+  it("custom-title overrides the user prompt", () => {
+    const session = mapTranscriptToSession([
+      systemInit(),
+      { type: "custom-title", customTitle: "Refactor sprint", sessionId: SID } as RawTranscriptLine,
+      userPrompt("Help me ship the redesign"),
+    ]);
+    expect(session.workItem.title).toBe("Refactor sprint");
+  });
+
+  it("user prompt wins over ai-title when no custom-title is set", () => {
+    const session = mapTranscriptToSession([
+      systemInit(),
+      { type: "ai-title", aiTitle: "Auto-generated title", sessionId: SID } as RawTranscriptLine,
+      userPrompt("Real user-typed prompt"),
+    ]);
+    expect(session.workItem.title).toBe("Real user-typed prompt");
+  });
+
+  it("ai-title is the fallback when there's no user prompt or custom-title", () => {
+    const session = mapTranscriptToSession([
+      systemInit(),
+      { type: "ai-title", aiTitle: "Inferred topic", sessionId: SID } as RawTranscriptLine,
+      assistantText("doing something"),
+    ]);
+    expect(session.workItem.title).toBe("Inferred topic");
+    // Work item should still get seeded so the run is renderable.
+    expect(session.events.find((e) => e.type === "work_item.created")).toBeDefined();
+  });
+
+  it("default placeholder remains when no title source is present", () => {
+    const session = mapTranscriptToSession([systemInit(), assistantText("idle session")]);
+    // Without any title anchor, workItem stays unseeded and uses the
+    // default constructor placeholder.
+    expect(session.workItem.title).toBe("Observed Claude Code session");
+  });
+});
+
+describe("mapper — log-only line types from real transcripts", () => {
+  // PR #24: ai-title / custom-title are consumed by the seed phase (for
+  // title fallback); pr-link emits an artifact.produced. The remaining
+  // four (last-prompt, attachment, queue-operation) are log-only — they
+  // must not produce any events beyond what an equivalent session
+  // without them would produce.
+  it("last-prompt / attachment / queue-operation produce no extra events", () => {
+    const baseline = mapTranscriptToSession([
+      systemInit(),
+      userPrompt("hello"),
+      assistantText("done"),
+    ]);
+
+    const withLogOnly = mapTranscriptToSession([
+      systemInit(),
+      userPrompt("hello"),
+      { type: "last-prompt", lastPrompt: "hello", leafUuid: "u-0001", sessionId: SID } as RawTranscriptLine,
+      assistantText("done"),
       {
         type: "attachment",
         attachment: { name: "screenshot.png" },
@@ -383,7 +577,7 @@ describe("mapper — new line types pass through as no-ops", () => {
       { type: "queue-operation", operation: "model_swap", sessionId: SID } as RawTranscriptLine,
     ]);
 
-    expect(sessionWithNewTypes.events.length).toBe(sessionWithoutNewTypes.events.length);
+    expect(withLogOnly.events.length).toBe(baseline.events.length);
   });
 });
 
