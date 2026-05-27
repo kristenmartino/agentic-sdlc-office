@@ -42,7 +42,12 @@ that actually matter:
    run and an observed run.
 3. **Does the timeline render a one-agent chain?**
    Yes. `PhaseTimeline` walks `scenario.chain`. A chain of length 1 renders
-   one cell — minimal but honest about the observed run shape.
+   one cell — minimal but honest about the observed run shape. For observed
+   scenarios specifically, the position counter collapses adjacent duplicate
+   owner changes so a long Mira session that fires several
+   `owner.changed → mira` events doesn't run off the chain. Position is
+   also clamped to `chain.length - 1` as a safety net. See
+   [`src/lib/timeline-position.ts`](../../src/lib/timeline-position.ts).
 4. **Where does read-only enforcement live?**
    In two places: the validator rejects any `decision.requested` or
    `approval.requested` event in an observed scenario, and the
@@ -64,20 +69,33 @@ The returned `ParsedClaudeCodeSession`:
     capturedAt: string;
     note?: string;
   };
-  events: WorkflowEvent[];  // chronological
+  workItem: WorkItem;          // the work item the session was about
+  chain: AgentId[];            // expected handoff order (informational for observed)
+  events: WorkflowEvent[];     // chronological
 }
 ```
 
-The fixture at `observed-sample.json` is exactly this shape (plus a
-`workItem` and `chain` block that the scenario registry needs separately).
+This is everything the scenario registry needs to register an observed
+scenario. There's no separate transformation step between "parser is done"
+and "scenario is renderable" — the parser output *is* a scenario, minus
+the `id`/`title`/`subtitle`/`kind` metadata that always lives on the
+registry side.
+
+The fixture at `observed-sample.json` is exactly this shape; the loader
+routes it through `sessionFromFixture()` so fixture-driven code goes
+through the same function the real parser output will use.
+
+A companion helper, `deriveChainFromEvents()`, computes a `chain` from the
+session's `work_item.owner.changed` events (collapsing adjacent duplicates).
+Real parsers can call it to produce a sensible default, then override
+where needed.
 
 When the real parser lands:
 
 - `mock-events-observed.ts` switches from `import observedJson from
-  "./observed-sample.json"` to whatever the parser returns at build/import
-  time.
-- Nothing else changes. The `Scenario` entry, the store, the validator, the
-  UI, and the tests all stay put.
+  "./observed-sample.json"` to `parseClaudeCodeTranscript(rawJsonl)`.
+- Nothing else changes. The `Scenario` entry, the store, the validator,
+  the UI, and the tests all stay put.
 
 ## Why a stub error class, not a `TODO`
 

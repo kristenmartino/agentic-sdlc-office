@@ -3,13 +3,20 @@
 import { useOfficeStore } from "@/state/officeStore";
 import { SCENARIOS } from "@/data/scenarios";
 import { MOCK_AGENTS, AGENT_COLORS } from "@/data/mock-agents";
+import { timelinePosition } from "@/lib/timeline-position";
 
 /**
  * A compact horizontal ribbon showing the scenario's expected handoff chain.
  * Past steps are dim, current is highlighted, future steps are very dim.
- * Position is derived from the count of work_item.owner.changed events,
- * so it correctly handles agents that appear twice in the chain (e.g. Rune
- * in BUG-032: observer at start, reviewer near the end).
+ *
+ * For scripted scenarios, the position advances 1:1 with `work_item.owner.changed`
+ * events (so BUG-032's two-Rune chain works correctly). For observed scenarios,
+ * the chain is derived from the actual owner sequence — adjacent duplicates
+ * are collapsed — and the position is computed against that collapsed view.
+ *
+ * Position is always clamped to `chain.length - 1` so a session that emits
+ * more distinct owner changes than the chain knows about doesn't silently
+ * lose its current-step highlight.
  *
  * When the run completes, the final pill flips to green and a trailing
  * "Done" indicator appears so the demo has a clear terminal state.
@@ -19,9 +26,9 @@ export default function PhaseTimeline() {
   const log = useOfficeStore((s) => s.log);
   const runState = useOfficeStore((s) => s.runState);
 
-  const chain = SCENARIOS[scenarioId].chain;
-  const ownerChanges = log.filter((e) => e.type === "work_item.owner.changed").length;
-  const position = ownerChanges - 1; // -1 before the first owner.changed fires
+  const scenario = SCENARIOS[scenarioId];
+  const chain = scenario.chain;
+  const position = timelinePosition(log, chain, scenario.source);
   const isCompleted = runState === "completed";
 
   return (
@@ -72,3 +79,4 @@ export default function PhaseTimeline() {
     </div>
   );
 }
+
