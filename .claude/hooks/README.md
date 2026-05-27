@@ -6,9 +6,13 @@ PreToolUse hook scripts that enforce the P0–P7 permission ladder at runtime, c
 
 | Hook | Matches | Blocks |
 | --- | --- | --- |
-| [bash-guard.js](bash-guard.js) | `Bash` | `pnpm/npm/yarn/bun add/remove/update/uninstall`, `pnpm/npm/yarn install <pkg>`, `npx`, `bunx`, `pnpm dlx`, all force-push variants (`--force` / `-f` / `--force-with-lease` / `--force-if-includes`), `sudo`, `curl … \| sh`, shell writes to `.env` / `.github/workflows/` / `.claude/hooks/` / `.claude/agents/`, `rm -rf` |
-| [write-guard.js](write-guard.js) | `Edit`, `Write`, `MultiEdit` | `package.json`, lockfiles (`pnpm-lock.yaml` / `package-lock.json` / `yarn.lock`), `.github/workflows/**`, `.env*`, `.claude/settings.json`, **`.claude/hooks/**`**, **`.claude/agents/**`** |
+| [bash-guard.js](bash-guard.js) | `Bash` | `pnpm/npm/yarn/bun add/remove/update/uninstall`, `pnpm/npm/yarn install <pkg>`, **lockfile-mutating install flags** (`--lockfile-only`, `--fix-lockfile`, `--package-lock-only`, `--mode=update-lockfile`), `npx`, `bunx`, `pnpm dlx`, **Node one-liners** (`node -e` / `--eval` / `-p` / `--print`), all force-push variants (`--force` / `-f` / `--force-with-lease` / `--force-if-includes`), `sudo`, `curl … \| sh`, shell writes to `.env` / `.github/workflows/` / `.claude/hooks/` / `.claude/agents/`, `rm -rf` |
+| [write-guard.js](write-guard.js) | `Edit`, `Write`, `MultiEdit` | `package.json`, lockfiles (`pnpm-lock.yaml` / `package-lock.json` / `yarn.lock`), `.github/workflows/**`, `.env*`, `.claude/settings.json`, `.claude/hooks/**`, `.claude/agents/**` |
 | [hooks.test.ts](hooks.test.ts) | — | Vitest smoke tests for both hooks. Runs in CI via `pnpm test`. |
+
+## Fail-closed on malformed payload
+
+Both hooks fail closed if the PreToolUse JSON payload can't be parsed: they emit a `BLOCKED … malformed PreToolUse payload (fail-closed)` message and exit 2. Empty stdin (zero bytes) still allows since it parses to `{}` with no command to check.
 
 ## Why Node, not bash
 
@@ -40,7 +44,6 @@ These hooks enforce the levels from [docs/agents/permissions.md](../../docs/agen
 
 ```bash
 pnpm test
-# 43 hook tests + 12 reducer/validator tests
 ```
 
 ## What these still can't enforce

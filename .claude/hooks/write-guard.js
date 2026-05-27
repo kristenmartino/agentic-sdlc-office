@@ -5,11 +5,18 @@
 const chunks = [];
 process.stdin.on("data", (chunk) => chunks.push(chunk));
 process.stdin.on("end", () => {
-  let input = {};
+  const raw = Buffer.concat(chunks).toString("utf8");
+
+  // Fail closed on malformed input.
+  let input;
   try {
-    input = JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}");
+    input = JSON.parse(raw || "{}");
   } catch {
-    process.exit(0);
+    process.stderr.write(
+      "BLOCKED by .claude/hooks/write-guard.js: malformed PreToolUse payload (fail-closed).\n" +
+        `  raw: ${raw.slice(0, 200)}\n`,
+    );
+    process.exit(2);
   }
 
   const tool = String(input?.tool_name ?? "");

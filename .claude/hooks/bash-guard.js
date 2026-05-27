@@ -5,20 +5,26 @@
 //   exit 0          → allow
 //   exit 2          → deny (Claude surfaces stderr)
 //
-// Catches dynamic patterns that .claude/settings.json's static `permissions.deny`
-// can't (e.g. `pnpm add <anything>`, `npx <anything>`, force-push variants).
+// Fail-closed: malformed input denies (safer default for unattended runs).
 //
-// Written in Node (not bash) so it works without `jq` and is easier to test.
+// Catches dynamic patterns that .claude/settings.json's static `permissions.deny`
+// can't (any new package name, all Node one-liners, force-push variants, lockfile flags).
 
 const chunks = [];
 process.stdin.on("data", (chunk) => chunks.push(chunk));
 process.stdin.on("end", () => {
-  let input = {};
+  const raw = Buffer.concat(chunks).toString("utf8");
+
+  // Fail closed on malformed input.
+  let input;
   try {
-    input = JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}");
+    input = JSON.parse(raw || "{}");
   } catch {
-    // Malformed input — fail open, the static deny list is still in effect.
-    process.exit(0);
+    process.stderr.write(
+      "BLOCKED by .claude/hooks/bash-guard.js: malformed PreToolUse payload (fail-closed).\n" +
+        `  raw: ${raw.slice(0, 200)}\n`,
+    );
+    process.exit(2);
   }
 
   const command = String(input?.tool_input?.command ?? "");
@@ -43,22 +49,41 @@ process.stdin.on("end", () => {
     deny("piping remote content into a shell is not permitted.");
   }
 
+  // ---- Node one-liners ----
+  // Block `node -e`, `node --eval`, `node -p`, `node --print`. They bypass write-guard
+  // because writes happen inside the spawned script, not via Claude's Edit/Write tool.
+  if (/(^|[\s;&|])node\s+(--?eval|-e|-p|--print)(\s|=|$)/.test(command)) {
+    deny("node one-liners (-e / --eval / -p / --print) bypass write-guard — require explicit approval.");
+  }
+
   // ---- Package manager: add/remove/uninstall/update/upgrade — always denied (P6) ----
   if (/(^|[\s;&|])(pnpm|npm|yarn|bun)\s+(add|remove|uninstall|update|upgrade)\b/.test(command)) {
     deny("package manager add/remove/update requires a Decision Inbox entry (P6).");
   }
 
-  // ---- Package manager: install/i with a positional package arg ----
-  //   Allowed: `pnpm install`, `pnpm install --frozen-lockfile`, `pnpm i`
-  //   Denied:  `pnpm install lodash`, `pnpm i lodash`, `npm install lodash`
+  // ---- Package manager: install/i ----
+  //   Allowed: `pnpm install`, `pnpm install --frozen-lockfile`, `pnpm install --offline`
+  //   Denied:
+  //     - any positional package arg (e.g. `pnpm install lodash`)
+  //     - any flag that mutates the lockfile
   const installMatch = command.match(/(^|[\s;&|])((pnpm|npm|yarn|bun)\s+(install|i))(.*)$/);
   if (installMatch) {
     const rest = installMatch[5] ?? "";
-    // Look for any positional argument that is not a flag.
     const tokens = rest.trim().split(/\s+/).filter(Boolean);
     const hasPositional = tokens.some((t) => t && !t.startsWith("-"));
     if (hasPositional) {
       deny("installing a specific package requires a Decision Inbox entry (P6). Use 'pnpm install --frozen-lockfile' to refresh from lockfile.");
+    }
+    // Block lockfile-mutating flags. `--frozen-lockfile` and `--offline` are explicitly allowed.
+    const lockfileMutatingFlags = [
+      "--lockfile-only",
+      "--fix-lockfile",
+      "--package-lock-only",
+      "--mode=update-lockfile",
+      "--resolution-only",
+    ];
+    if (lockfileMutatingFlags.some((f) => rest.includes(f))) {
+      deny("lockfile-mutating install flag detected — requires a Decision (P6). Allowed: --frozen-lockfile, --offline.");
     }
   }
 
@@ -71,8 +96,6 @@ process.stdin.on("end", () => {
   }
 
   // ---- Force-push variants ----
-  // Catch `git push ... --force`, `-f`, `--force-with-lease`, `--force-if-includes`.
-  // All of these rewrite history and are P7.
   if (/git\s+push\b/.test(command)) {
     if (/(\s|=)(--force|--force-with-lease|--force-if-includes|-f)(\b|=|$)/.test(command)) {
       deny("force-push of any variant is P7 (rewrites history) — requires explicit human approval.");
@@ -96,7 +119,6 @@ process.stdin.on("end", () => {
 
   // ---- Mass deletes ----
   if (/(^|[\s;&|])rm\s+-[rfRF]+\s+/.test(command)) {
-    // The static `Bash(rm -rf:*)` deny in settings.json catches the most common forms; this is the safety net.
     deny("recursive rm is not permitted via this hook — verify path and ask for explicit approval.");
   }
 
