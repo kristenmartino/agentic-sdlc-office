@@ -1,12 +1,264 @@
 import type { WorkflowEvent } from "../types/workflow-events";
+import { REQ_014_ID } from "./mock-work-items";
 
+// Base timestamp + offset (ms) per step. Chosen so the script reads "real" without anchoring to wall-clock.
+const BASE = Date.parse("2026-05-26T18:00:00.000Z");
+const STEP_MS = 2500;
+const ts = (step: number) => new Date(BASE + step * STEP_MS).toISOString();
+
+let _id = 0;
+const eid = () => `evt_${String(++_id).padStart(4, "0")}`;
+
+const DECISION_ID = "dec_req014_tokens";
+const BLOCKER_ID = "blk_req014_tokens";
+const APPROVAL_ID = "apr_req014_merge";
+
+// Quality gate IDs (created when their passed event fires)
+const GATES = {
+  intent: "gate_req014_intent",
+  plan: "gate_req014_plan",
+  ui: "gate_req014_ui",
+  build: "gate_req014_build",
+  qa: "gate_req014_qa",
+  security: "gate_req014_security",
+} as const;
+
+// Artifact IDs
+const ART = {
+  acceptance: "art_req014_acceptance",
+  research: "art_req014_research",
+  adr: "art_req014_adr",
+  ui_spec: "art_req014_ui_spec",
+  pr: "art_req014_pr",
+  test_plan: "art_req014_test_plan",
+  review: "art_req014_review",
+} as const;
+
+/**
+ * Full REQ-014 mock event sequence.
+ * Two pause points (reducer waits for human input after these):
+ *  - `decision.requested` (token naming)
+ *  - `approval.requested` (merge to main)
+ */
 export const MOCK_EVENTS: WorkflowEvent[] = [
-  {
-    id: "evt_0001",
-    ts: new Date().toISOString(),
-    actor: "human",
-    type: "work_item.created",
-    subject: "wi_req-014",
-    payload: { title: "Add dark mode to dashboard" },
-  },
+  // --- Run begins ---
+  { id: eid(), ts: ts(0),  actor: "system", type: "run.started", subject: REQ_014_ID, payload: {} },
+  { id: eid(), ts: ts(1),  actor: "human",  type: "work_item.created", subject: REQ_014_ID,
+    payload: { title: "REQ-014 — Add dark mode to dashboard" } },
+  { id: eid(), ts: ts(2),  actor: "system", type: "work_item.owner.changed", subject: REQ_014_ID,
+    payload: { workItemId: REQ_014_ID, from: null, to: "piper" } },
+
+  // --- Piper: Intent ---
+  { id: eid(), ts: ts(3),  actor: "piper",  type: "agent.status.changed", subject: "piper",
+    payload: { agentId: "piper", from: "idle", to: "reading", message: "Reading the request" } },
+  { id: eid(), ts: ts(4),  actor: "piper",  type: "agent.message.sent", subject: "piper",
+    payload: { agentId: "piper", message: "Capturing acceptance criteria for dark mode." } },
+  { id: eid(), ts: ts(5),  actor: "piper",  type: "work_item.mode.changed", subject: REQ_014_ID,
+    payload: { workItemId: REQ_014_ID, from: null, to: "Intent" } },
+  { id: eid(), ts: ts(6),  actor: "piper",  type: "work_item.refined", subject: REQ_014_ID,
+    payload: { acceptance: [
+      "User can toggle dark mode from the dashboard header.",
+      "Preference persists across sessions.",
+      "All dashboard surfaces meet WCAG AA contrast in dark.",
+      "No flash-of-light on initial load.",
+    ], outOfScope: ["Theming for marketing pages", "Custom user-defined themes"] } },
+  { id: eid(), ts: ts(7),  actor: "piper",  type: "artifact.produced", subject: REQ_014_ID,
+    payload: { artifact: { id: ART.acceptance, workItemId: REQ_014_ID, producedBy: "piper",
+      kind: "acceptance_criteria", ref: "/docs/demos/req-014-dark-mode.md",
+      summary: "4 acceptance criteria, 2 explicit non-goals.", ts: ts(7) } } },
+  { id: eid(), ts: ts(8),  actor: "piper",  type: "quality_gate.passed", subject: REQ_014_ID,
+    payload: { gate: { id: GATES.intent, workItemId: REQ_014_ID, name: "Intent complete",
+      owner: "piper", status: "passed", notes: "Acceptance criteria reviewed." } } },
+  { id: eid(), ts: ts(9),  actor: "piper",  type: "agent.status.changed", subject: "piper",
+    payload: { agentId: "piper", from: "reading", to: "done" } },
+  { id: eid(), ts: ts(10), actor: "piper",  type: "handoff.requested", subject: REQ_014_ID,
+    payload: { fromAgentId: "piper", toAgentId: "nova" } },
+
+  // --- Nova: Research ---
+  { id: eid(), ts: ts(11), actor: "nova",   type: "handoff.accepted", subject: REQ_014_ID,
+    payload: { fromAgentId: "piper", toAgentId: "nova" } },
+  { id: eid(), ts: ts(12), actor: "system", type: "work_item.owner.changed", subject: REQ_014_ID,
+    payload: { workItemId: REQ_014_ID, from: "piper", to: "nova" } },
+  { id: eid(), ts: ts(13), actor: "nova",   type: "agent.status.changed", subject: "nova",
+    payload: { agentId: "nova", from: "idle", to: "reading", message: "Surveying prior art" } },
+  { id: eid(), ts: ts(14), actor: "nova",   type: "agent.message.sent", subject: "nova",
+    payload: { agentId: "nova", message: "Comparing semantic-token systems and direct-naming approaches." } },
+  { id: eid(), ts: ts(15), actor: "nova",   type: "artifact.produced", subject: REQ_014_ID,
+    payload: { artifact: { id: ART.research, workItemId: REQ_014_ID, producedBy: "nova",
+      kind: "research_brief", ref: "/docs/research/req-014.md",
+      summary: "Semantic tokens reduce future drift; direct naming is faster to learn.", ts: ts(15) } } },
+  { id: eid(), ts: ts(16), actor: "nova",   type: "agent.status.changed", subject: "nova",
+    payload: { agentId: "nova", from: "reading", to: "done" } },
+  { id: eid(), ts: ts(17), actor: "nova",   type: "handoff.requested", subject: REQ_014_ID,
+    payload: { fromAgentId: "nova", toAgentId: "theo" } },
+
+  // --- Theo: Architecture (raises a decision) ---
+  { id: eid(), ts: ts(18), actor: "theo",   type: "handoff.accepted", subject: REQ_014_ID,
+    payload: { fromAgentId: "nova", toAgentId: "theo" } },
+  { id: eid(), ts: ts(19), actor: "system", type: "work_item.owner.changed", subject: REQ_014_ID,
+    payload: { workItemId: REQ_014_ID, from: "nova", to: "theo" } },
+  { id: eid(), ts: ts(20), actor: "theo",   type: "work_item.mode.changed", subject: REQ_014_ID,
+    payload: { workItemId: REQ_014_ID, from: "Intent", to: "Generate" } },
+  { id: eid(), ts: ts(21), actor: "theo",   type: "agent.status.changed", subject: "theo",
+    payload: { agentId: "theo", from: "idle", to: "planning", message: "Drafting ADR" } },
+  { id: eid(), ts: ts(22), actor: "theo",   type: "artifact.produced", subject: REQ_014_ID,
+    payload: { artifact: { id: ART.adr, workItemId: REQ_014_ID, producedBy: "theo",
+      kind: "adr", ref: "/docs/architecture/adr-req-014.md",
+      summary: "Two viable token strategies. Tradeoffs documented; choice deferred.", ts: ts(22) } } },
+  { id: eid(), ts: ts(23), actor: "theo",   type: "decision.requested", subject: DECISION_ID,
+    payload: { decision: {
+      id: DECISION_ID,
+      workItemId: REQ_014_ID,
+      raisedBy: "theo",
+      question: "Name dark-surface tokens semantically (--surface-1) or directly (--bg-primary)?",
+      context: "Affects every downstream styling decision. Semantic names age better; direct names are easier to grep.",
+      options: [
+        { id: "a", label: "Semantic — `--surface-1`, `--surface-2`",
+          pros: ["Ages well", "Decouples paint from intent"],
+          cons: ["Learning curve", "Less greppable"] },
+        { id: "b", label: "Direct — `--bg-primary`, `--bg-secondary`",
+          pros: ["Immediately readable", "Greppable"],
+          cons: ["Couples paint to intent", "Harder to evolve"] },
+      ],
+      recommendation: "a",
+      reversible: "partially",
+    } } },
+  // --- PAUSE 1: reducer waits for matching decision.resolved from human ---
+
+  // (Theo blocked, Mira blocked-on-agent while waiting)
+  { id: eid(), ts: ts(24), actor: "theo",   type: "blocker.raised", subject: REQ_014_ID,
+    payload: { blocker: { id: BLOCKER_ID, workItemId: REQ_014_ID, raisedBy: "theo",
+      kind: "decision_needed", description: "Cannot finalize tokens without naming decision." } } },
+  { id: eid(), ts: ts(25), actor: "theo",   type: "agent.status.changed", subject: "theo",
+    payload: { agentId: "theo", from: "planning", to: "waiting_on_human" } },
+  { id: eid(), ts: ts(26), actor: "mira",   type: "agent.status.changed", subject: "mira",
+    payload: { agentId: "mira", from: "idle", to: "waiting_on_agent", message: "Waiting on token decision" } },
+  { id: eid(), ts: ts(27), actor: "cora",   type: "agent.status.changed", subject: "cora",
+    payload: { agentId: "cora", from: "idle", to: "working", message: "Routing decision to inbox" } },
+
+  // --- Resolve placeholder (the reducer emits this when the human clicks Resolve in the inbox).
+  //     Including it here lets the script be replayed deterministically without UI. ---
+  { id: eid(), ts: ts(28), actor: "human",  type: "decision.resolved", subject: DECISION_ID,
+    payload: { decisionId: DECISION_ID, chosenOptionId: "a", resolvedBy: "human" } },
+  { id: eid(), ts: ts(29), actor: "system", type: "blocker.cleared", subject: REQ_014_ID,
+    payload: { blockerId: BLOCKER_ID, resolution: "Tokens chosen: semantic naming." } },
+  { id: eid(), ts: ts(30), actor: "cora",   type: "agent.status.changed", subject: "cora",
+    payload: { agentId: "cora", from: "working", to: "idle" } },
+  { id: eid(), ts: ts(31), actor: "theo",   type: "agent.status.changed", subject: "theo",
+    payload: { agentId: "theo", from: "waiting_on_human", to: "done" } },
+  { id: eid(), ts: ts(32), actor: "theo",   type: "quality_gate.passed", subject: REQ_014_ID,
+    payload: { gate: { id: GATES.plan, workItemId: REQ_014_ID, name: "Plan reviewed",
+      owner: "theo", status: "passed", notes: "ADR signed off after decision." } } },
+  { id: eid(), ts: ts(33), actor: "theo",   type: "handoff.requested", subject: REQ_014_ID,
+    payload: { fromAgentId: "theo", toAgentId: "iris" } },
+
+  // --- Iris: UI Design ---
+  { id: eid(), ts: ts(34), actor: "iris",   type: "handoff.accepted", subject: REQ_014_ID,
+    payload: { fromAgentId: "theo", toAgentId: "iris" } },
+  { id: eid(), ts: ts(35), actor: "system", type: "work_item.owner.changed", subject: REQ_014_ID,
+    payload: { workItemId: REQ_014_ID, from: "theo", to: "iris" } },
+  { id: eid(), ts: ts(36), actor: "iris",   type: "agent.status.changed", subject: "iris",
+    payload: { agentId: "iris", from: "idle", to: "designing", message: "Drawing dark variants" } },
+  { id: eid(), ts: ts(37), actor: "iris",   type: "artifact.produced", subject: REQ_014_ID,
+    payload: { artifact: { id: ART.ui_spec, workItemId: REQ_014_ID, producedBy: "iris",
+      kind: "ui_spec", ref: "/docs/design/req-014-dark-mode.md",
+      summary: "Toggle in header. Dark tokens defined. Focus states verified.", ts: ts(37) } } },
+  { id: eid(), ts: ts(38), actor: "iris",   type: "quality_gate.passed", subject: REQ_014_ID,
+    payload: { gate: { id: GATES.ui, workItemId: REQ_014_ID, name: "UI reviewed",
+      owner: "iris", status: "passed", notes: "Tokens and contrast verified." } } },
+  { id: eid(), ts: ts(39), actor: "iris",   type: "agent.status.changed", subject: "iris",
+    payload: { agentId: "iris", from: "designing", to: "done" } },
+  { id: eid(), ts: ts(40), actor: "iris",   type: "handoff.requested", subject: REQ_014_ID,
+    payload: { fromAgentId: "iris", toAgentId: "mira" } },
+
+  // --- Mira: Build ---
+  { id: eid(), ts: ts(41), actor: "mira",   type: "handoff.accepted", subject: REQ_014_ID,
+    payload: { fromAgentId: "iris", toAgentId: "mira" } },
+  { id: eid(), ts: ts(42), actor: "system", type: "work_item.owner.changed", subject: REQ_014_ID,
+    payload: { workItemId: REQ_014_ID, from: "iris", to: "mira" } },
+  { id: eid(), ts: ts(43), actor: "mira",   type: "agent.status.changed", subject: "mira",
+    payload: { agentId: "mira", from: "waiting_on_agent", to: "coding", message: "Implementing tokens + toggle" } },
+  { id: eid(), ts: ts(44), actor: "mira",   type: "artifact.produced", subject: REQ_014_ID,
+    payload: { artifact: { id: ART.pr, workItemId: REQ_014_ID, producedBy: "mira",
+      kind: "code_pr", ref: "draft PR #42",
+      summary: "Adds CSS vars, toggle component, persistence via localStorage.", ts: ts(44) } } },
+  { id: eid(), ts: ts(45), actor: "mira",   type: "quality_gate.passed", subject: REQ_014_ID,
+    payload: { gate: { id: GATES.build, workItemId: REQ_014_ID, name: "Build green",
+      owner: "mira", status: "passed", notes: "Local build + unit tests pass." } } },
+  { id: eid(), ts: ts(46), actor: "mira",   type: "agent.status.changed", subject: "mira",
+    payload: { agentId: "mira", from: "coding", to: "done" } },
+  { id: eid(), ts: ts(47), actor: "mira",   type: "handoff.requested", subject: REQ_014_ID,
+    payload: { fromAgentId: "mira", toAgentId: "tess" } },
+
+  // --- Tess: QA ---
+  { id: eid(), ts: ts(48), actor: "tess",   type: "handoff.accepted", subject: REQ_014_ID,
+    payload: { fromAgentId: "mira", toAgentId: "tess" } },
+  { id: eid(), ts: ts(49), actor: "system", type: "work_item.owner.changed", subject: REQ_014_ID,
+    payload: { workItemId: REQ_014_ID, from: "mira", to: "tess" } },
+  { id: eid(), ts: ts(50), actor: "tess",   type: "work_item.mode.changed", subject: REQ_014_ID,
+    payload: { workItemId: REQ_014_ID, from: "Generate", to: "Validate" } },
+  { id: eid(), ts: ts(51), actor: "tess",   type: "agent.status.changed", subject: "tess",
+    payload: { agentId: "tess", from: "idle", to: "testing", message: "Contrast + regression" } },
+  { id: eid(), ts: ts(52), actor: "tess",   type: "artifact.produced", subject: REQ_014_ID,
+    payload: { artifact: { id: ART.test_plan, workItemId: REQ_014_ID, producedBy: "tess",
+      kind: "test_plan", ref: "/tests/req-014-dark-mode.spec.ts",
+      summary: "All 4 acceptance criteria covered. 0 regressions.", ts: ts(52) } } },
+  { id: eid(), ts: ts(53), actor: "tess",   type: "quality_gate.passed", subject: REQ_014_ID,
+    payload: { gate: { id: GATES.qa, workItemId: REQ_014_ID, name: "QA green",
+      owner: "tess", status: "passed", notes: "All acceptance criteria pass." } } },
+  { id: eid(), ts: ts(54), actor: "tess",   type: "agent.status.changed", subject: "tess",
+    payload: { agentId: "tess", from: "testing", to: "done" } },
+  { id: eid(), ts: ts(55), actor: "tess",   type: "handoff.requested", subject: REQ_014_ID,
+    payload: { fromAgentId: "tess", toAgentId: "rune" } },
+
+  // --- Rune: Review ---
+  { id: eid(), ts: ts(56), actor: "rune",   type: "handoff.accepted", subject: REQ_014_ID,
+    payload: { fromAgentId: "tess", toAgentId: "rune" } },
+  { id: eid(), ts: ts(57), actor: "system", type: "work_item.owner.changed", subject: REQ_014_ID,
+    payload: { workItemId: REQ_014_ID, from: "tess", to: "rune" } },
+  { id: eid(), ts: ts(58), actor: "rune",   type: "agent.status.changed", subject: "rune",
+    payload: { agentId: "rune", from: "idle", to: "reviewing", message: "Security + a11y review" } },
+  { id: eid(), ts: ts(59), actor: "rune",   type: "artifact.produced", subject: REQ_014_ID,
+    payload: { artifact: { id: ART.review, workItemId: REQ_014_ID, producedBy: "rune",
+      kind: "review_report", ref: "PR #42 review",
+      summary: "No security findings. No a11y blockers. Approved.", ts: ts(59) } } },
+  { id: eid(), ts: ts(60), actor: "rune",   type: "quality_gate.passed", subject: REQ_014_ID,
+    payload: { gate: { id: GATES.security, workItemId: REQ_014_ID, name: "Security cleared",
+      owner: "rune", status: "passed", notes: "0 findings." } } },
+  { id: eid(), ts: ts(61), actor: "rune",   type: "agent.status.changed", subject: "rune",
+    payload: { agentId: "rune", from: "reviewing", to: "done" } },
+  { id: eid(), ts: ts(62), actor: "rune",   type: "handoff.requested", subject: REQ_014_ID,
+    payload: { fromAgentId: "rune", toAgentId: "cora" } },
+
+  // --- Cora: route to human for merge ---
+  { id: eid(), ts: ts(63), actor: "cora",   type: "handoff.accepted", subject: REQ_014_ID,
+    payload: { fromAgentId: "rune", toAgentId: "cora" } },
+  { id: eid(), ts: ts(64), actor: "system", type: "work_item.owner.changed", subject: REQ_014_ID,
+    payload: { workItemId: REQ_014_ID, from: "rune", to: "cora" } },
+  { id: eid(), ts: ts(65), actor: "cora",   type: "work_item.mode.changed", subject: REQ_014_ID,
+    payload: { workItemId: REQ_014_ID, from: "Validate", to: "Govern" } },
+  { id: eid(), ts: ts(66), actor: "cora",   type: "agent.status.changed", subject: "cora",
+    payload: { agentId: "cora", from: "idle", to: "working", message: "Requesting merge approval" } },
+  { id: eid(), ts: ts(67), actor: "cora",   type: "approval.requested", subject: APPROVAL_ID,
+    payload: { approval: {
+      id: APPROVAL_ID,
+      workItemId: REQ_014_ID,
+      action: "Merge PR #42 to `main` and deploy via flag",
+      level: "P7",
+      raisedBy: "cora",
+    } } },
+  // --- PAUSE 2: reducer waits for matching approval.resolved from human ---
+
+  { id: eid(), ts: ts(68), actor: "human",  type: "approval.resolved", subject: APPROVAL_ID,
+    payload: { approvalId: APPROVAL_ID, granted: true, resolvedBy: "human" } },
+  { id: eid(), ts: ts(69), actor: "cora",   type: "agent.status.changed", subject: "cora",
+    payload: { agentId: "cora", from: "working", to: "done" } },
+  { id: eid(), ts: ts(70), actor: "system", type: "work_item.completed", subject: REQ_014_ID,
+    payload: { workItemId: REQ_014_ID } },
+  { id: eid(), ts: ts(71), actor: "system", type: "run.completed", subject: REQ_014_ID, payload: {} },
 ];
+
+/** Returns true if the reducer should pause after applying this event (waiting for human input). */
+export function isPausePoint(event: WorkflowEvent): boolean {
+  return event.type === "decision.requested" || event.type === "approval.requested";
+}

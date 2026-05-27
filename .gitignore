@@ -34,3 +34,12 @@ pnpm-debug.log*
 .cache/
 .tmp/
 .turbo/
+
+# Next.js
+.next/
+out/
+*.tsbuildinfo
+
+# Lockfiles for other package managers
+yarn.lock
+package-lock.json

@@ -9,30 +9,39 @@ export interface DecisionOption {
 
 export interface Decision {
   id: string;
-  workItem: string;
+  workItemId: string;
   question: string;
+  context: string;
   options: DecisionOption[];
   recommendation: string | null;
+  raisedBy: AgentId;
   resolved: boolean;
+  chosenOptionId: string | null;
   resolvedBy: AgentId | "human" | null;
   resolvedAt: string | null;
+  reversible: "yes" | "partially" | "no";
 }
 
 export interface Blocker {
   id: string;
-  workItem: string;
+  workItemId: string;
   raisedBy: AgentId;
-  kind: "missing_info" | "dependency" | "decision_needed" | "gate_failed" | "external";
+  kind:
+    | "missing_info"
+    | "dependency"
+    | "decision_needed"
+    | "gate_failed"
+    | "external";
   description: string;
-  resolution?: string;
-  resolvedAt?: string;
+  resolution: string | null;
+  resolvedAt: string | null;
 }
 
 export interface QualityGate {
   id: string;
-  workItem: string;
+  workItemId: string;
   name: string;
   owner: AgentId;
   status: "pending" | "passed" | "failed" | "waived";
-  notes?: string;
+  notes: string | null;
 }

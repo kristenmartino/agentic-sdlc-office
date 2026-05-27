@@ -51,6 +51,7 @@ body:
         - Govern
         - Deploy
         - Observe
+        - Multi
     validations:
       required: true
   - type: input
