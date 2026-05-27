@@ -2,61 +2,19 @@ import type { AgentId, AgentStatus } from "@/types/agents";
 import type { RoomId } from "@/types/rooms";
 import type { ADLCMode } from "@/types/adlc";
 import type { Scenario } from "@/data/scenarios";
-import type { WorkItem, WorkItemKind, WorkItemStatus } from "@/types/work-items";
+import type { WorkItem } from "@/types/work-items";
 import type { WorkflowEventType } from "@/types/workflow-events";
-
-const VALID_AGENTS = new Set<AgentId>([
-  "cora", "piper", "nova", "theo", "iris", "mira", "tess", "rune",
-]);
-
-const VALID_ROOMS = new Set<RoomId>([
-  "lobby", "product-research", "architecture-design", "dev-floor",
-  "qa-lab", "review-security", "human-office", "archive",
-]);
-
-const VALID_STATUSES = new Set<AgentStatus>([
-  "idle", "thinking", "reading", "planning", "designing", "coding", "testing",
-  "reviewing", "talking", "meeting", "waiting_on_agent", "waiting_on_human",
-  "blocked", "done", "failed",
-]);
-
-const VALID_MODES = new Set<ADLCMode>([
-  "Intent", "Generate", "Validate", "Govern", "Deploy", "Observe", "Multi",
-]);
-
-const VALID_ACTORS = new Set<string>([
-  ...VALID_AGENTS, "human", "system",
-]);
-
-const VALID_WORK_ITEM_KINDS = new Set<WorkItemKind>([
-  "feature", "bug", "research", "task",
-]);
-
-const VALID_WORK_ITEM_STATUSES = new Set<WorkItemStatus>([
-  "captured", "refined", "researching", "planning", "designing", "building",
-  "validating", "reviewing", "awaiting_human", "done",
-]);
-
-const VALID_EVENT_TYPES = new Set<WorkflowEventType>([
-  "run.started", "run.paused", "run.completed",
-  "work_item.created", "work_item.refined", "work_item.owner.changed",
-  "work_item.mode.changed", "work_item.completed",
-  "agent.started", "agent.finished", "agent.status.changed",
-  "agent.moved", "agent.message.sent",
-  "room.entered", "room.exited",
-  "handoff.requested", "handoff.accepted", "handoff.completed",
-  "artifact.produced",
-  "decision.requested", "decision.resolved",
-  "blocker.raised", "blocker.cleared",
-  "quality_gate.passed", "quality_gate.failed",
-  "approval.requested", "approval.resolved",
-  "meeting.started", "meeting.ended",
-  "permission.bumped", "permission.expired",
-]);
-
-const ISO_8601_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:?\d{2})$/;
-const isIsoTimestamp = (v: unknown): v is string =>
-  typeof v === "string" && ISO_8601_RE.test(v) && !Number.isNaN(Date.parse(v));
+import {
+  KNOWN_ADLC_MODES as VALID_MODES,
+  KNOWN_AGENT_IDS as VALID_AGENTS,
+  KNOWN_AGENT_STATUSES as VALID_STATUSES,
+  KNOWN_EVENT_ACTORS as VALID_ACTORS,
+  KNOWN_ROOM_IDS as VALID_ROOMS,
+  KNOWN_WORK_ITEM_KINDS as VALID_WORK_ITEM_KINDS,
+  KNOWN_WORK_ITEM_STATUSES as VALID_WORK_ITEM_STATUSES,
+  KNOWN_WORKFLOW_EVENT_TYPES as VALID_EVENT_TYPES,
+  isIsoTimestamp,
+} from "./runtime-unions";
 
 export interface ValidationIssue {
   scenarioId: string;
