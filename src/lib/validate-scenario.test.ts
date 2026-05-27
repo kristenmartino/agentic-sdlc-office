@@ -76,4 +76,55 @@ describe("validateScenario", () => {
     const issues = validateScenario(SCENARIOS["bug-032"]);
     expect(issues).toEqual([]);
   });
+
+  it("observed-sample has no issues", () => {
+    const issues = validateScenario(SCENARIOS["observed-sample"]);
+    expect(issues, JSON.stringify(issues, null, 2)).toEqual([]);
+  });
+
+  it("does not enforce chain length on observed scenarios", () => {
+    // Observed sessions don't have a 1:1 chain ↔ owner.changed relationship.
+    // The observed sample only owner-changes once (to mira) but the chain has length 1,
+    // so no issue. Confirm by inflating the chain — should still validate.
+    const bad: Scenario = {
+      ...SCENARIOS["observed-sample"],
+      chain: ["mira", "tess", "rune"],
+    };
+    const issues = validateScenario(bad);
+    expect(issues.some((i) => i.message.includes("does not match work_item.owner.changed count"))).toBe(false);
+  });
+
+  it("flags decision.requested in an observed scenario", () => {
+    const bad: Scenario = {
+      ...SCENARIOS["observed-sample"],
+      events: [
+        ...SCENARIOS["observed-sample"].events,
+        {
+          id: "evt_obs_bad",
+          ts: "2026-05-27T14:30:50.000Z",
+          actor: "mira",
+          type: "decision.requested",
+          subject: "dec_obs_bad",
+          payload: {
+            decision: {
+              id: "dec_obs_bad",
+              workItemId: "wi_observed_001",
+              question: "Should we ship?",
+              context: "",
+              options: [],
+              recommendation: null,
+              raisedBy: "mira",
+              resolved: false,
+              chosenOptionId: null,
+              resolvedBy: null,
+              resolvedAt: null,
+              reversible: "yes",
+            },
+          },
+        },
+      ],
+    };
+    const issues = validateScenario(bad);
+    expect(issues.some((i) => i.message.includes("observer mode is read-only"))).toBe(true);
+  });
 });

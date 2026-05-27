@@ -18,7 +18,7 @@ Scope discipline. If it isn't on this board, it isn't planned for the named rele
 
 ## Next (v0.2)
 
-- Real local agent runtime observer
+- Real local agent runtime observer — **spike landed in v0.1** ([docs/architecture/observer-spike.md](../architecture/observer-spike.md)); v0.2 wires the real Claude Code transcript parser
 - Claude Code event ingestion (read `.claude/`, prompt files, agent activity)
 - Real artifacts generated from agent activity instead of mocks
 - Multiple work items in flight at once

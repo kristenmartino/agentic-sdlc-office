@@ -24,13 +24,17 @@ export default function Page() {
 
   const scenario = SCENARIOS[scenarioId];
   const isIncident = scenario.kind === "bug";
+  const isObserved = scenario.source === "observed";
   const runHasStarted = log.length > 0;
   const showIncidentBanner = isIncident && runHasStarted;
+  const showObservedBanner = isObserved;
   const showIdleHero = !runHasStarted && runState === "idle";
 
   return (
     <main className={`min-h-screen p-6 max-w-[1280px] mx-auto transition-colors ${
       showIncidentBanner ? "bg-[radial-gradient(ellipse_at_top,rgba(239,68,68,0.06),transparent_50%)]" : ""
+    } ${
+      showObservedBanner ? "bg-[radial-gradient(ellipse_at_top,rgba(139,92,246,0.05),transparent_50%)]" : ""
     }`}>
       {showIncidentBanner && (
         <div className="mb-4 px-3 py-2 rounded-lg border border-red-500/40 bg-red-950/30 flex items-center gap-3">
@@ -40,6 +44,26 @@ export default function Page() {
           </p>
           <p className="text-[10px] text-red-300/70 truncate">
             {workItem.title}
+          </p>
+        </div>
+      )}
+
+      {showObservedBanner && (
+        <div className="mb-4 px-3 py-2 rounded-lg border border-iris/40 bg-iris/5 flex items-center gap-3 flex-wrap">
+          <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-iris/20 text-iris ring-1 ring-iris/40">
+            v0.2 PREVIEW
+          </span>
+          <p className="text-[11px] font-medium text-iris">
+            Observer mode — read-only
+          </p>
+          {scenario.origin && (
+            <p className="text-[10px] text-office-muted truncate font-mono">
+              {scenario.origin.source} · {scenario.origin.sessionId} · captured{" "}
+              {new Date(scenario.origin.capturedAt).toLocaleString()}
+            </p>
+          )}
+          <p className="text-[10px] text-office-muted/80">
+            Sample fixture · real Claude Code transcript parser deferred to v0.2.
           </p>
         </div>
       )}

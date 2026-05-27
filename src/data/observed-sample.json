@@ -1,0 +1,219 @@
+{
+  "$schema": "https://agentic-sdlc-office.local/schemas/observed-session.json",
+  "comment": "v0.2 PREVIEW — Sample 'observed' session. This file represents the output of a parsed Claude Code session, where one local agent worked through a small refactor. Read-only in the UI: no decisions are surfaced, no handoffs occur, the work item is single-owner. When the parser is implemented later, sessions like this will be produced from a real Claude Code transcript instead of being hand-authored.",
+  "origin": {
+    "source": "claude-code-local",
+    "sessionId": "local-2026-05-27-1430Z",
+    "capturedAt": "2026-05-27T14:30:00.000Z",
+    "note": "Hand-authored sample. Parser wiring deferred to v0.2."
+  },
+  "workItem": {
+    "id": "wi_observed_001",
+    "title": "Observed — Refactor primary button to use design tokens",
+    "kind": "feature",
+    "status": "captured",
+    "currentMode": "Generate",
+    "currentPhase": "Live Claude Code session",
+    "ownerAgentId": null,
+    "nextAgentId": "mira",
+    "assignedAgentIds": [],
+    "humanDecisionNeeded": false,
+    "branch": null,
+    "worktreePath": null,
+    "modeHistory": [],
+    "artifactIds": [],
+    "decisionIds": [],
+    "blockerIds": [],
+    "qualityGateIds": [],
+    "acceptance": [],
+    "outOfScope": [],
+    "createdAt": "2026-05-27T14:30:00.000Z",
+    "updatedAt": "2026-05-27T14:30:00.000Z"
+  },
+  "chain": ["mira"],
+  "events": [
+    {
+      "id": "evt_obs_0001",
+      "ts": "2026-05-27T14:30:00.000Z",
+      "actor": "system",
+      "type": "run.started",
+      "subject": "wi_observed_001",
+      "payload": { "source": "claude-code-local" }
+    },
+    {
+      "id": "evt_obs_0002",
+      "ts": "2026-05-27T14:30:02.500Z",
+      "actor": "human",
+      "type": "work_item.created",
+      "subject": "wi_observed_001",
+      "payload": {
+        "title": "Refactor primary button to use design tokens",
+        "via": "user prompt"
+      }
+    },
+    {
+      "id": "evt_obs_0003",
+      "ts": "2026-05-27T14:30:05.000Z",
+      "actor": "system",
+      "type": "work_item.owner.changed",
+      "subject": "wi_observed_001",
+      "payload": { "workItemId": "wi_observed_001", "from": null, "to": "mira" }
+    },
+    {
+      "id": "evt_obs_0004",
+      "ts": "2026-05-27T14:30:07.500Z",
+      "actor": "mira",
+      "type": "work_item.mode.changed",
+      "subject": "wi_observed_001",
+      "payload": { "workItemId": "wi_observed_001", "from": null, "to": "Generate" }
+    },
+    {
+      "id": "evt_obs_0005",
+      "ts": "2026-05-27T14:30:10.000Z",
+      "actor": "mira",
+      "type": "agent.status.changed",
+      "subject": "mira",
+      "payload": {
+        "agentId": "mira",
+        "from": "idle",
+        "to": "reading",
+        "message": "Reading current Button.tsx"
+      }
+    },
+    {
+      "id": "evt_obs_0006",
+      "ts": "2026-05-27T14:30:12.500Z",
+      "actor": "mira",
+      "type": "agent.message.sent",
+      "subject": "mira",
+      "payload": {
+        "agentId": "mira",
+        "message": "6 hardcoded colors found. Mapping to design tokens."
+      }
+    },
+    {
+      "id": "evt_obs_0007",
+      "ts": "2026-05-27T14:30:15.000Z",
+      "actor": "mira",
+      "type": "agent.status.changed",
+      "subject": "mira",
+      "payload": {
+        "agentId": "mira",
+        "from": "reading",
+        "to": "planning",
+        "message": "Planning the edit"
+      }
+    },
+    {
+      "id": "evt_obs_0008",
+      "ts": "2026-05-27T14:30:17.500Z",
+      "actor": "mira",
+      "type": "agent.status.changed",
+      "subject": "mira",
+      "payload": {
+        "agentId": "mira",
+        "from": "planning",
+        "to": "coding",
+        "message": "Editing Button.tsx"
+      }
+    },
+    {
+      "id": "evt_obs_0009",
+      "ts": "2026-05-27T14:30:20.000Z",
+      "actor": "mira",
+      "type": "artifact.produced",
+      "subject": "wi_observed_001",
+      "payload": {
+        "artifact": {
+          "id": "art_observed_button_diff",
+          "workItemId": "wi_observed_001",
+          "producedBy": "mira",
+          "kind": "code_pr",
+          "ref": "Button.tsx (local diff)",
+          "summary": "Button.tsx: 6 token replacements",
+          "ts": "2026-05-27T14:30:20.000Z"
+        }
+      }
+    },
+    {
+      "id": "evt_obs_0010",
+      "ts": "2026-05-27T14:30:22.500Z",
+      "actor": "mira",
+      "type": "agent.message.sent",
+      "subject": "mira",
+      "payload": {
+        "agentId": "mira",
+        "message": "Diff written. Updating test snapshot next."
+      }
+    },
+    {
+      "id": "evt_obs_0011",
+      "ts": "2026-05-27T14:30:25.000Z",
+      "actor": "mira",
+      "type": "agent.status.changed",
+      "subject": "mira",
+      "payload": {
+        "agentId": "mira",
+        "from": "coding",
+        "to": "testing",
+        "message": "Running pnpm test"
+      }
+    },
+    {
+      "id": "evt_obs_0012",
+      "ts": "2026-05-27T14:30:30.000Z",
+      "actor": "mira",
+      "type": "quality_gate.passed",
+      "subject": "wi_observed_001",
+      "payload": {
+        "gate": {
+          "id": "gate_observed_unit",
+          "workItemId": "wi_observed_001",
+          "name": "Unit tests",
+          "owner": "mira",
+          "status": "passed",
+          "notes": "pnpm test — all green"
+        }
+      }
+    },
+    {
+      "id": "evt_obs_0013",
+      "ts": "2026-05-27T14:30:32.500Z",
+      "actor": "mira",
+      "type": "agent.message.sent",
+      "subject": "mira",
+      "payload": {
+        "agentId": "mira",
+        "message": "Tests green. Refactor complete."
+      }
+    },
+    {
+      "id": "evt_obs_0014",
+      "ts": "2026-05-27T14:30:35.000Z",
+      "actor": "mira",
+      "type": "agent.status.changed",
+      "subject": "mira",
+      "payload": {
+        "agentId": "mira",
+        "from": "testing",
+        "to": "done"
+      }
+    },
+    {
+      "id": "evt_obs_0015",
+      "ts": "2026-05-27T14:30:37.500Z",
+      "actor": "system",
+      "type": "work_item.completed",
+      "subject": "wi_observed_001",
+      "payload": { "workItemId": "wi_observed_001" }
+    },
+    {
+      "id": "evt_obs_0016",
+      "ts": "2026-05-27T14:30:40.000Z",
+      "actor": "system",
+      "type": "run.completed",
+      "subject": "wi_observed_001",
+      "payload": {}
+    }
+  ]
+}
