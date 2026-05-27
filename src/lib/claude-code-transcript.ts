@@ -172,6 +172,46 @@ export function validateRawTranscriptLine(
     case "system":
       // System lines are intentionally permissive — they carry arbitrary metadata.
       break;
+    case "ai-title":
+      if (typeof obj.aiTitle !== "string") {
+        push("aiTitle", `ai-title line must have a string 'aiTitle' field (got ${typeof obj.aiTitle})`);
+      }
+      break;
+    case "custom-title":
+      if (typeof obj.customTitle !== "string") {
+        push("customTitle", `custom-title line must have a string 'customTitle' field (got ${typeof obj.customTitle})`);
+      }
+      break;
+    case "last-prompt":
+      if (typeof obj.lastPrompt !== "string") {
+        push("lastPrompt", `last-prompt line must have a string 'lastPrompt' field (got ${typeof obj.lastPrompt})`);
+      }
+      break;
+    case "pr-link":
+      if (typeof obj.prUrl !== "string") {
+        push("prUrl", `pr-link line must have a string 'prUrl' field (got ${typeof obj.prUrl})`);
+      }
+      if (typeof obj.prRepository !== "string") {
+        push("prRepository", `pr-link line must have a string 'prRepository' field (got ${typeof obj.prRepository})`);
+      }
+      if (typeof obj.prNumber !== "string" && typeof obj.prNumber !== "number") {
+        push("prNumber", `pr-link line must have a string|number 'prNumber' field (got ${typeof obj.prNumber})`);
+      }
+      break;
+    case "attachment":
+      if (obj.attachment === undefined) {
+        push("attachment", `attachment line must have an 'attachment' field`);
+      }
+      // Don't recurse into the attachment payload — it could be a binary blob
+      // or anything tool-specific. The privacy policy is that the mapper
+      // never renders attachment content; the validator just confirms the
+      // field exists.
+      break;
+    case "queue-operation":
+      if (typeof obj.operation !== "string") {
+        push("operation", `queue-operation line must have a string 'operation' field (got ${typeof obj.operation})`);
+      }
+      break;
   }
 }
 

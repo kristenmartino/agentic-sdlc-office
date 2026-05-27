@@ -57,9 +57,14 @@ describe("KNOWN_* sets", () => {
     expect(KNOWN_WORKFLOW_EVENT_TYPES.size).toBe(31);
   });
 
-  it("KNOWN_RAW_TRANSCRIPT_LINE_TYPES covers system/user/assistant/summary", () => {
-    expect(KNOWN_RAW_TRANSCRIPT_LINE_TYPES.size).toBe(4);
-    for (const t of ["system", "user", "assistant", "summary"] as const) {
+  it("KNOWN_RAW_TRANSCRIPT_LINE_TYPES covers the 10 line types real Claude Code sessions use", () => {
+    // 4 originals + 6 added after the real-transcript discovery (PR #44).
+    expect(KNOWN_RAW_TRANSCRIPT_LINE_TYPES.size).toBe(10);
+    const expected = [
+      "system", "user", "assistant", "summary",
+      "ai-title", "custom-title", "last-prompt", "pr-link", "attachment", "queue-operation",
+    ] as const;
+    for (const t of expected) {
       expect(KNOWN_RAW_TRANSCRIPT_LINE_TYPES.has(t)).toBe(true);
     }
   });

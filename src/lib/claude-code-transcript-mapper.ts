@@ -127,6 +127,18 @@ export function mapTranscriptToSession(
       case "summary":
         // Summary is informational — title hint only, no event.
         break;
+      // The following six types are accepted (no longer rejected by the
+      // validator) but the mapper currently walks past them as no-ops.
+      // PR #46 will consume `pr-link` as `artifact.produced` and use
+      // `ai-title` / `custom-title` for title fallback. Attachments are
+      // never rendered by default for privacy reasons.
+      case "ai-title":
+      case "custom-title":
+      case "last-prompt":
+      case "pr-link":
+      case "attachment":
+      case "queue-operation":
+        break;
     }
   }
 

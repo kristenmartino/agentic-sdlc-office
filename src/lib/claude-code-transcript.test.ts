@@ -220,3 +220,115 @@ describe("validateRawTranscript", () => {
     expect(issues[1].message).toContain("got string");
   });
 });
+
+describe("validateRawTranscript — line types added after real-transcript discovery", () => {
+  function validate(jsonl: string): RawTranscriptIssue[] {
+    return validateRawTranscript(parseRawTranscript(jsonl));
+  }
+
+  it("accepts a valid ai-title line", () => {
+    expect(validate('{"type":"ai-title","aiTitle":"Refactor button","sessionId":"s1"}')).toEqual([]);
+  });
+
+  it("rejects ai-title missing aiTitle", () => {
+    const issues = validate('{"type":"ai-title","sessionId":"s1"}');
+    expect(issues.some((i) => i.field === "aiTitle")).toBe(true);
+  });
+
+  it("accepts a valid custom-title line", () => {
+    expect(validate('{"type":"custom-title","customTitle":"my session","sessionId":"s1"}')).toEqual([]);
+  });
+
+  it("rejects custom-title missing customTitle", () => {
+    const issues = validate('{"type":"custom-title","sessionId":"s1"}');
+    expect(issues.some((i) => i.field === "customTitle")).toBe(true);
+  });
+
+  it("accepts a valid last-prompt line", () => {
+    expect(validate('{"type":"last-prompt","lastPrompt":"do x","leafUuid":"l1","sessionId":"s1"}')).toEqual([]);
+  });
+
+  it("rejects last-prompt missing lastPrompt", () => {
+    const issues = validate('{"type":"last-prompt","sessionId":"s1"}');
+    expect(issues.some((i) => i.field === "lastPrompt")).toBe(true);
+  });
+
+  it("accepts a valid pr-link line (string prNumber)", () => {
+    expect(validate(
+      '{"type":"pr-link","prNumber":"42","prUrl":"https://github.com/example/repo/pull/42","prRepository":"example/repo","sessionId":"s1"}',
+    )).toEqual([]);
+  });
+
+  it("accepts a valid pr-link line (number prNumber)", () => {
+    expect(validate(
+      '{"type":"pr-link","prNumber":42,"prUrl":"https://github.com/example/repo/pull/42","prRepository":"example/repo","sessionId":"s1"}',
+    )).toEqual([]);
+  });
+
+  it("rejects pr-link missing required fields", () => {
+    const issues = validate('{"type":"pr-link","sessionId":"s1"}');
+    expect(issues.some((i) => i.field === "prUrl")).toBe(true);
+    expect(issues.some((i) => i.field === "prRepository")).toBe(true);
+    expect(issues.some((i) => i.field === "prNumber")).toBe(true);
+  });
+
+  it("accepts a valid attachment line", () => {
+    expect(validate('{"type":"attachment","attachment":{"name":"x"},"uuid":"u1","sessionId":"s1"}')).toEqual([]);
+  });
+
+  it("rejects attachment missing attachment field", () => {
+    const issues = validate('{"type":"attachment","uuid":"u1","sessionId":"s1"}');
+    expect(issues.some((i) => i.field === "attachment")).toBe(true);
+  });
+
+  it("accepts a valid queue-operation line", () => {
+    expect(validate('{"type":"queue-operation","operation":"model_swap","sessionId":"s1"}')).toEqual([]);
+  });
+
+  it("rejects queue-operation missing operation", () => {
+    const issues = validate('{"type":"queue-operation","sessionId":"s1"}');
+    expect(issues.some((i) => i.field === "operation")).toBe(true);
+  });
+});
+
+describe("validateRawTranscript — additive envelope fields", () => {
+  it("accepts tool_use blocks with the optional 'caller' field", () => {
+    const issues = validateRawTranscript(parseRawTranscript(
+      '{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"Read","input":{},"caller":"main"}]}}',
+    ));
+    expect(issues).toEqual([]);
+  });
+
+  it("accepts user lines with the optional top-level 'toolUseResult' sibling field", () => {
+    const jsonl = JSON.stringify({
+      type: "user",
+      message: {
+        role: "user",
+        content: [{ type: "tool_result", tool_use_id: "t1", content: "ok" }],
+      },
+      toolUseResult: { stdout: "x", stderr: "", interrupted: false },
+    });
+    expect(validateRawTranscript(parseRawTranscript(jsonl))).toEqual([]);
+  });
+
+  it("accepts assistant lines with the optional 'requestId' and MCP attribution fields", () => {
+    const jsonl = JSON.stringify({
+      type: "assistant",
+      requestId: "req-123",
+      attributionMcpServer: "Claude_in_Chrome",
+      attributionMcpTool: "find",
+      message: { role: "assistant", content: [{ type: "text", text: "hi" }] },
+    });
+    expect(validateRawTranscript(parseRawTranscript(jsonl))).toEqual([]);
+  });
+
+  it("accepts user lines with the optional 'permissionMode' and 'promptId' fields", () => {
+    const jsonl = JSON.stringify({
+      type: "user",
+      permissionMode: "acceptEdits",
+      promptId: "p1",
+      message: { role: "user", content: "hello" },
+    });
+    expect(validateRawTranscript(parseRawTranscript(jsonl))).toEqual([]);
+  });
+});

@@ -81,6 +81,8 @@ export const KNOWN_WORKFLOW_EVENT_TYPES: ReadonlySet<WorkflowEventType> = new Se
 
 export const KNOWN_RAW_TRANSCRIPT_LINE_TYPES: ReadonlySet<RawTranscriptLine["type"]> = new Set([
   "system", "user", "assistant", "summary",
+  // Added after real-transcript discovery (PR #44):
+  "ai-title", "custom-title", "last-prompt", "pr-link", "attachment", "queue-operation",
 ]);
 
 export const KNOWN_CONTENT_BLOCK_TYPES: ReadonlySet<ContentBlock["type"]> = new Set([

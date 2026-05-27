@@ -201,5 +201,6 @@ In rough priority order (high → low):
 ## Status
 
 - ✅ Synthetic fixture proves the parser/validator/mapper round-trip end-to-end.
-- ⚠️ Real session reveals six unmodeled line types, a structured `toolUseResult` field the mapper ignores, and limited failure detection.
-- ⏳ Next PR: address the six new line types and the `toolUseResult` consumption gap. The rest can land incrementally.
+- ✅ **Real session now accepts** — the 6 new line types and the additive envelope fields (including `caller` on tool_use and `toolUseResult` on user lines) are typed and validated as of PR #23 (#45 in reviewer numbering). Mapper walks past the new types as no-ops; behaviour change is the next PR's scope.
+- ⚠️ `toolUseResult` is *accepted* but not yet *consumed* — the mapper still only reads `tool_result.content`. Rich failure detection and structured artifacts come next.
+- ⏳ Next PR: consume `toolUseResult` for richer Bash failure detection + Edit/Write artifact metadata. After that, log-only handling for MCP/Task/AskUserQuestion/compact_boundary so the office surfaces what real sessions actually do.

@@ -22,8 +22,10 @@
  * without creating a circular dependency.
  *
  * Source of truth: these types reflect the JSONL shape as observed in
- * Claude Code today. When Anthropic publishes a formal schema, this file
- * should be updated to match.
+ * Claude Code today. The current set was validated against a real local
+ * session (see [`docs/architecture/real-transcript-discovery.md`]). When
+ * Anthropic publishes a formal schema, this file should be updated to
+ * match.
  */
 
 export type ContentBlock = TextBlock | ToolUseBlock | ToolResultBlock | ThinkingBlock;
@@ -41,6 +43,12 @@ export interface ToolUseBlock {
   name: string;
   /** Arbitrary tool-specific input. */
   input: Record<string, unknown>;
+  /**
+   * Attribution string indicating which Claude Code sub-flow initiated the
+   * tool call. Real transcripts populate this; optional on the type because
+   * older sessions may omit it.
+   */
+  caller?: string;
 }
 
 export interface ToolResultBlock {
@@ -69,33 +77,73 @@ interface RawTranscriptLineBase {
   cwd?: string;
   /** Claude Code version that produced the line. */
   version?: string;
+  /** Whether the input was supplied by the human (`"external"`) or internal. */
+  userType?: string;
+  /** True when the line is part of a nested subagent conversation. */
+  isSidechain?: boolean;
+  /** Git branch at the time of the turn — useful for `WorkItem.branch`. */
+  gitBranch?: string;
+  /** How the session was launched (CLI flag, IDE integration, etc.). */
+  entrypoint?: string;
 }
 
 export interface RawUserMessage extends RawTranscriptLineBase {
   type: "user";
+  /** Per-user-prompt id Claude Code uses internally. */
+  promptId?: string;
+  /** Permission mode in effect when the user submitted (e.g. `"acceptEdits"`). */
+  permissionMode?: string;
   message: {
     role: "user";
     /** Short prompts are plain strings; tool results arrive as content arrays. */
     content: string | ContentBlock[];
   };
+  /**
+   * Structured sibling of `message.content`, populated when the user line
+   * carries a tool_result. Real transcripts use this to carry rich,
+   * per-tool data (Bash stdout/stderr/interrupted, Edit oldString/newString/
+   * structuredPatch, etc.) that the model sees only as the string in
+   * `tool_result.content`. The mapper can consume this for richer events
+   * (PR #46 territory). Kept as `unknown` for now because the shape is
+   * tool-specific.
+   */
+  toolUseResult?: unknown;
+  /** Points back to the assistant turn whose tool_use this line answers. */
+  sourceToolAssistantUUID?: string;
 }
 
 export interface RawAssistantMessage extends RawTranscriptLineBase {
   type: "assistant";
+  /** Anthropic API request id. */
+  requestId?: string;
+  /** MCP attribution — server name when the tool_use originated via MCP. */
+  attributionMcpServer?: string;
+  /** MCP attribution — tool name when the tool_use originated via MCP. */
+  attributionMcpTool?: string;
   message: {
     role: "assistant";
     content: ContentBlock[];
     /** Anthropic model id, e.g. "claude-opus-4-7". */
     model?: string;
     stop_reason?: string | null;
+    /** Additional fields seen on real sessions; kept as unknown until needed. */
+    id?: string;
+    type?: string;
+    stop_sequence?: unknown;
+    stop_details?: unknown;
+    usage?: unknown;
+    diagnostics?: unknown;
   };
 }
 
 export interface RawSystemMessage extends RawTranscriptLineBase {
   type: "system";
-  /** Free-form subtype tag — values include "init", "context", etc. */
+  /**
+   * Real sessions show `stop_hook_summary`, `compact_boundary`, `api_error`;
+   * the original spike fixture used `init`. The validator stays permissive
+   * here — system lines carry arbitrary metadata.
+   */
   subtype?: string;
-  /** Many system lines also carry arbitrary metadata. */
   [key: string]: unknown;
 }
 
@@ -105,8 +153,69 @@ export interface RawSummaryLine extends RawTranscriptLineBase {
   summary: string;
 }
 
+// ─── Lines added after real-transcript discovery (PR #44) ────────────────────
+//
+// These six types appear in real Claude Code sessions but weren't in the
+// original spike fixture. They're modeled here so the validator stops
+// rejecting them outright; mapping behavior for them is conservative
+// (mostly log-only — see the mapper for details).
+
+// All extend RawTranscriptLineBase so the common envelope fields (uuid,
+// timestamp, sessionId, etc.) are typed consistently. Real transcripts may
+// omit envelope fields on meta lines like `ai-title` / `custom-title` —
+// they're optional on the base, so absence is fine.
+
+/** Auto-generated session title; sometimes the only source of a title. */
+export interface RawAiTitleLine extends RawTranscriptLineBase {
+  type: "ai-title";
+  aiTitle: string;
+}
+
+/** User-supplied session title override; takes precedence over `ai-title`. */
+export interface RawCustomTitleLine extends RawTranscriptLineBase {
+  type: "custom-title";
+  customTitle: string;
+}
+
+/** Pointer to the UUID of the last user prompt. Useful for nav, not mapping. */
+export interface RawLastPromptLine extends RawTranscriptLineBase {
+  type: "last-prompt";
+  lastPrompt: string;
+  leafUuid?: string;
+}
+
+/** Records that the session opened a PR. */
+export interface RawPrLinkLine extends RawTranscriptLineBase {
+  type: "pr-link";
+  prNumber: number | string;
+  prUrl: string;
+  prRepository: string;
+}
+
+/**
+ * User attached a file mid-session. Mapper does not render attachment content
+ * by default — see the privacy stance in `claude-code-transcript-format.md`.
+ */
+export interface RawAttachmentLine extends RawTranscriptLineBase {
+  type: "attachment";
+  attachment: unknown;
+}
+
+/** Internal queue state (model swap, retry, compaction trigger, etc.). */
+export interface RawQueueOperationLine extends RawTranscriptLineBase {
+  type: "queue-operation";
+  operation: string;
+  content?: unknown;
+}
+
 export type RawTranscriptLine =
   | RawUserMessage
   | RawAssistantMessage
   | RawSystemMessage
-  | RawSummaryLine;
+  | RawSummaryLine
+  | RawAiTitleLine
+  | RawCustomTitleLine
+  | RawLastPromptLine
+  | RawPrLinkLine
+  | RawAttachmentLine
+  | RawQueueOperationLine;
