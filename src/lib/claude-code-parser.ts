@@ -1,6 +1,7 @@
 import type { WorkflowEvent } from "@/types/workflow-events";
 import type { WorkItem } from "@/types/work-items";
 import type { AgentId } from "@/types/agents";
+import { isKnownAgentId } from "./runtime-unions";
 
 /**
  * Claude Code session parser — v0.2 stub.
@@ -151,10 +152,3 @@ export function deriveChainFromEvents(session: ParsedClaudeCodeSession): AgentId
   return [];
 }
 
-const KNOWN_AGENT_IDS: ReadonlySet<AgentId> = new Set([
-  "cora", "piper", "nova", "theo", "iris", "mira", "tess", "rune",
-]);
-
-function isKnownAgentId(value: unknown): value is AgentId {
-  return typeof value === "string" && KNOWN_AGENT_IDS.has(value as AgentId);
-}

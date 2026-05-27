@@ -5,13 +5,14 @@ Where to look when a doc and the code disagree.
 ## Ordering
 
 1. **`src/types/*`** — the discriminated unions and interfaces are canonical for runtime field shapes. If `AgentStatus` is missing a value, the value doesn't exist.
-2. **`src/lib/validate-scenario.ts`** — canonical for which combinations of those values are *legal* in an event stream. A status that passes TS but fails validation is by definition invalid.
-3. **`src/state/apply-event.ts`** — canonical for how each event type mutates `OfficeState`. The docs may summarise this but the function is the spec.
-4. **Docs under `docs/`** — human-readable companion. Lags. Don't trust against the above three; trust against each other only if all are recently updated.
+2. **`src/lib/runtime-unions.ts`** — single source of truth for the *runtime* `Set` mirrors of those unions. Every runtime check (`.has(value as T)`) imports from here so the agent/room/mode/status/event-type lists can't drift between modules.
+3. **`src/lib/validate-scenario.ts`** — canonical for which combinations of those values are *legal* in a registered scenario. A status that passes TS but fails validation is by definition invalid.
+4. **`src/state/apply-event.ts`** — canonical for how each event type mutates `OfficeState`. The docs may summarise this but the function is the spec.
+5. **Docs under `docs/`** — human-readable companion. Lags. Don't trust against the above; trust against each other only if all are recently updated.
 
 ## What this means in practice
 
-- New status / room / mode / event type → change the type union first, then the validator (so existing scenarios still validate), then the reducer (so the new value actually does something), then the docs.
+- New status / room / mode / event type → change the type union first, then add the value to the matching `KNOWN_*` set in `runtime-unions.ts` so all runtime validators see it, then the reducer (so the new value actually does something), then the docs.
 - Removing a status / event type → same order in reverse. Remove from docs last so search keeps finding both old and new names while the migration is in flight.
 - Adding a scenario → write the events, run `pnpm test` (validator runs on every scenario in the registry), then update docs that count scenarios.
 
