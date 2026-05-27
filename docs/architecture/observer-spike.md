@@ -125,5 +125,11 @@ implementation creep in invisibly.
 - Whether observer mode also captures hook outputs (`PreToolUse`,
   `PostToolUse`) or just transcript turns.
 
+The shape of the raw input is now documented — see
+[`claude-code-transcript-format.md`](claude-code-transcript-format.md) and
+[`src/lib/claude-code-transcript.ts`](../../src/lib/claude-code-transcript.ts).
+JSONL → typed raw lines is implemented; raw lines → `WorkflowEvent[]` is
+the next PR.
+
 See also: [`docs/product/now-next-later-never.md`](../product/now-next-later-never.md)
 for where this sits in the roadmap.

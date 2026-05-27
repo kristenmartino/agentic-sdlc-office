@@ -75,13 +75,21 @@ export class ClaudeCodeParserNotImplementedError extends Error {
 /**
  * Parse a raw Claude Code transcript file (JSONL) into a ParsedClaudeCodeSession.
  *
- * v0.2: implement against the real Claude Code transcript format.
- * v0.1: throws, by design, so callers can't accidentally depend on parser
+ * The JSONL → raw lines half is implemented: callers can use
+ * `parseRawTranscript()` from `claude-code-transcript.ts` to get a typed
+ * `RawTranscriptLine[]`. What still throws is the *mapping* step from
+ * those raw lines to office events — choosing an office agent, deciding
+ * which tool_uses become artifacts, etc.
+ *
+ * The shape of the input is documented in
+ * [`docs/architecture/claude-code-transcript-format.md`](../../docs/architecture/claude-code-transcript-format.md).
+ *
+ * v0.2: implement the mapping. v0.1: throws so callers can't depend on
  * output that doesn't exist yet.
  */
 export function parseClaudeCodeTranscript(_rawJsonl: string): ParsedClaudeCodeSession {
   throw new ClaudeCodeParserNotImplementedError(
-    "transcript JSONL parsing is a v0.2 task — see EPIC for status",
+    "raw lines → WorkflowEvent[] mapping is a v0.2 task — JSONL parsing itself works via parseRawTranscript()",
   );
 }
 
