@@ -1,6 +1,6 @@
 # Data Model
 
-TypeScript-first data model. Source of truth lives in `src/types/`. This doc is the human-readable companion.
+TypeScript-first data model. Source of truth lives in `src/types/` — see [state-source-of-truth.md](state-source-of-truth.md) for the ordering rules between code and these docs. This doc is the human-readable companion.
 
 ## Entities
 

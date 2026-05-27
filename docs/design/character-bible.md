@@ -2,15 +2,27 @@
 
 Per-agent visual identity for v0.1. Used for placeholder rendering and for asset prompts later. Tone: professional + playful, not childish.
 
-For each agent: a silhouette cue (shape that reads at 24px), a signature color, a signature prop, the room they live in, and 6 states.
+For each agent: a silhouette cue (shape that reads at 24px), a signature color, a signature prop, the room they live in, and a shared set of states.
 
-States (shared across all agents):
+States (shared across all agents — exactly the values of `AgentStatus` in [`src/types/agents.ts`](../../src/types/agents.ts); the scenario validator rejects any other value):
+
 - `idle` — neutral pose, slow breathing animation
 - `thinking` — tilted head, small dot loop
-- `working` — leaning forward, prop in use
-- `talking` — open mouth, slight bob
-- `blocked` — arms crossed, exclamation cue
-- `done` — small celebratory glow
+- `reading` — head down at file/book/screen, subtle scan motion
+- `planning` — writing on a board or blueprint
+- `designing` — arranging components, color/token cue
+- `coding` — typing, terminal glow, cursor pulse
+- `testing` — checklist/lab action, test pulse
+- `reviewing` — magnifier or audit posture
+- `talking` — speech bubble, slight bob
+- `meeting` — grouped/roundtable posture
+- `waiting_on_agent` — yellow wait indicator, gaze toward the target agent
+- `waiting_on_human` — amber/red wait indicator, standing near the Human Office
+- `blocked` — exclamation cue, arms crossed or stopped posture
+- `done` — soft halo / checkmark, no confetti
+- `failed` — red error cue, broken-test or bug indicator
+
+These map 1:1 to `STATUS_COLOR` and `STATUS_LABEL` in [`src/components/office/StatusBubble.tsx`](../../src/components/office/StatusBubble.tsx). Add a state in code first, then this doc, then asset prompts.
 
 ## Cora — Delivery Lead / Orchestrator
 
@@ -75,8 +87,9 @@ States (shared across all agents):
 
 - All silhouettes read at 24px minimum.
 - Agents never share a primary color; collisions hurt at-a-glance recognition.
-- Props animate only when status indicates activity (`working`, `talking`).
+- Props animate only when status indicates active work: `reading`, `planning`, `designing`, `coding`, `testing`, `reviewing`, `talking`, or `meeting`. Idle, waiting, blocked, done, and failed states hold still.
 - A `done` state adds a soft halo, not confetti.
+- A `failed` state shows a red error cue; the agent does not animate but the prop does not disappear.
 
 ## Related
 
