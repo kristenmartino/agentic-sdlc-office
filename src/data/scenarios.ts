@@ -1,5 +1,6 @@
 import type { WorkItem, WorkItemKind } from "../types/work-items";
 import type { WorkflowEvent } from "../types/workflow-events";
+import type { AgentId } from "../types/agents";
 import { REQ_014_EVENTS } from "./mock-events-req014";
 import { BUG_032_EVENTS } from "./mock-events-bug032";
 import { REQ_014_INITIAL, BUG_032_INITIAL } from "./mock-work-items";
@@ -13,6 +14,8 @@ export interface Scenario {
   kind: WorkItemKind;
   initialWorkItem: WorkItem;
   events: WorkflowEvent[];
+  /** Expected handoff order. Drives the PhaseTimeline ribbon. */
+  chain: AgentId[];
 }
 
 export const SCENARIOS: Record<ScenarioId, Scenario> = {
@@ -23,6 +26,7 @@ export const SCENARIOS: Record<ScenarioId, Scenario> = {
     kind: "feature",
     initialWorkItem: REQ_014_INITIAL,
     events: REQ_014_EVENTS,
+    chain: ["piper", "nova", "theo", "iris", "mira", "tess", "rune", "cora"],
   },
   "bug-032": {
     id: "bug-032",
@@ -31,6 +35,8 @@ export const SCENARIOS: Record<ScenarioId, Scenario> = {
     kind: "bug",
     initialWorkItem: BUG_032_INITIAL,
     events: BUG_032_EVENTS,
+    // Rune appears twice — once as observer, once as reviewer. UI dedupes by position.
+    chain: ["rune", "piper", "nova", "theo", "mira", "tess", "rune", "cora"],
   },
 };
 

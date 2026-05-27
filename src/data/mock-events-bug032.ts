@@ -241,4 +241,15 @@ export const BUG_032_EVENTS: WorkflowEvent[] = [
   { id: eid(), ts: ts(68), actor: "system", type: "work_item.completed", subject: BUG_032_ID,
     payload: { workItemId: BUG_032_ID } },
   { id: eid(), ts: ts(69), actor: "system", type: "run.completed", subject: BUG_032_ID, payload: {} },
+
+  // --- Movement choreography ---
+  // Cora as courier: leaves Human Office to collect Rune's expedited review, then returns
+  // to surface the rollout decision to the human.
+  { id: eid(), ts: ts(55.5), actor: "cora", type: "agent.moved", subject: "cora",
+    payload: { agentId: "cora", from: "human-office", to: "review-security" } },
+  { id: eid(), ts: ts(57.5), actor: "cora", type: "agent.moved", subject: "cora",
+    payload: { agentId: "cora", from: "review-security", to: "human-office" } },
 ];
+
+// Sort by timestamp so play order interleaves the inserted movement events correctly.
+BUG_032_EVENTS.sort((a, b) => a.ts.localeCompare(b.ts));

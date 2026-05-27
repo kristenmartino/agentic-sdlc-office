@@ -86,6 +86,54 @@ describe("officeStore reducer", () => {
     expect(state.decisions.some((d) => !d.resolved)).toBe(true);
   });
 
+  it("REQ-014 choreography: Theo is in human-office during the decision pause", () => {
+    useOfficeStore.getState().loadScenario("req-014");
+    const events = SCENARIOS["req-014"].events;
+    const movedToHumanIdx = events.findIndex(
+      (e) =>
+        e.type === "agent.moved" &&
+        (e.payload as { agentId?: string; to?: string }).agentId === "theo" &&
+        (e.payload as { agentId?: string; to?: string }).to === "human-office",
+    );
+    expect(movedToHumanIdx).toBeGreaterThan(0);
+
+    useOfficeStore.getState().seekTo(movedToHumanIdx + 1);
+    const theo = useOfficeStore.getState().agents.find((a) => a.id === "theo")!;
+    expect(theo.currentRoom).toBe("human-office");
+  });
+
+  it("REQ-014 choreography: Theo returns to architecture-design after the decision resolves", () => {
+    useOfficeStore.getState().loadScenario("req-014");
+    const events = SCENARIOS["req-014"].events;
+    const movedBackIdx = events.findIndex(
+      (e) =>
+        e.type === "agent.moved" &&
+        (e.payload as { agentId?: string; to?: string }).agentId === "theo" &&
+        (e.payload as { agentId?: string; to?: string }).to === "architecture-design",
+    );
+    expect(movedBackIdx).toBeGreaterThan(0);
+
+    useOfficeStore.getState().seekTo(movedBackIdx + 1);
+    const theo = useOfficeStore.getState().agents.find((a) => a.id === "theo")!;
+    expect(theo.currentRoom).toBe("architecture-design");
+  });
+
+  it("BUG-032 choreography: Cora visits review-security to collect Rune's review", () => {
+    useOfficeStore.getState().loadScenario("bug-032");
+    const events = SCENARIOS["bug-032"].events;
+    const corraVisitIdx = events.findIndex(
+      (e) =>
+        e.type === "agent.moved" &&
+        (e.payload as { agentId?: string; to?: string }).agentId === "cora" &&
+        (e.payload as { agentId?: string; to?: string }).to === "review-security",
+    );
+    expect(corraVisitIdx).toBeGreaterThan(0);
+
+    useOfficeStore.getState().seekTo(corraVisitIdx + 1);
+    const cora = useOfficeStore.getState().agents.find((a) => a.id === "cora")!;
+    expect(cora.currentRoom).toBe("review-security");
+  });
+
   it("tick surfaces awaiting_human when it would otherwise stall on an unresolved gate", () => {
     // Simulate a stalled state: seek past decision.requested AND the immediately-following
     // blocker.raised events so the next event would be the still-gated decision.resolved.

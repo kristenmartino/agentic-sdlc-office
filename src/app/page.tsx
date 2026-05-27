@@ -4,6 +4,7 @@ import { useOfficeStore } from "@/state/officeStore";
 import { SCENARIOS } from "@/data/scenarios";
 import Office from "@/components/office/Office";
 import HandoffIndicator from "@/components/office/HandoffIndicator";
+import PhaseTimeline from "@/components/office/PhaseTimeline";
 import DemoControls from "@/components/controls/DemoControls";
 import ScenarioSelector from "@/components/controls/ScenarioSelector";
 import DecisionInbox from "@/components/decisions/DecisionInbox";
@@ -60,6 +61,7 @@ export default function Page() {
 
       <div className="grid grid-cols-[1fr_320px] gap-4">
         <div className="flex flex-col gap-4">
+          <PhaseTimeline />
           <Office />
           <HandoffIndicator />
 
