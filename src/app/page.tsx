@@ -1,22 +1,45 @@
 "use client";
 
 import { useOfficeStore } from "@/state/officeStore";
+import { SCENARIOS } from "@/data/scenarios";
 import Office from "@/components/office/Office";
 import DemoControls from "@/components/controls/DemoControls";
+import ScenarioSelector from "@/components/controls/ScenarioSelector";
 import DecisionInbox from "@/components/decisions/DecisionInbox";
 import ActivityLog from "@/components/activity/ActivityLog";
 import AgentDrawer from "@/components/drawers/AgentDrawer";
 import WorkItemDrawer from "@/components/drawers/WorkItemDrawer";
 
 export default function Page() {
+  const scenarioId = useOfficeStore((s) => s.scenarioId);
   const workItem = useOfficeStore((s) => s.workItem);
+  const log = useOfficeStore((s) => s.log);
   const openWi = useOfficeStore((s) => s.openWorkItemDrawer);
   const decisions = useOfficeStore((s) => s.decisions);
   const openDecisions = decisions.filter((d) => !d.resolved).length;
 
+  const scenario = SCENARIOS[scenarioId];
+  const isIncident = scenario.kind === "bug";
+  const runHasStarted = log.length > 0;
+  const showIncidentBanner = isIncident && runHasStarted;
+
   return (
-    <main className="min-h-screen p-6 max-w-[1280px] mx-auto">
-      <header className="flex items-center justify-between mb-6">
+    <main className={`min-h-screen p-6 max-w-[1280px] mx-auto transition-colors ${
+      showIncidentBanner ? "bg-[radial-gradient(ellipse_at_top,rgba(239,68,68,0.06),transparent_50%)]" : ""
+    }`}>
+      {showIncidentBanner && (
+        <div className="mb-4 px-3 py-2 rounded-lg border border-red-500/40 bg-red-950/30 flex items-center gap-3">
+          <span className="w-2 h-2 rounded-full bg-red-400 animate-pulse-soft" />
+          <p className="text-[11px] font-medium text-red-200">
+            Incident in progress — {workItem.id.toUpperCase().replace("WI_", "")}
+          </p>
+          <p className="text-[10px] text-red-300/70 truncate">
+            {workItem.title}
+          </p>
+        </div>
+      )}
+
+      <header className="flex items-center justify-between mb-6 gap-4 flex-wrap">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-md bg-gradient-to-br from-cora/30 to-iris/20 border border-office-line flex items-center justify-center">
             <span className="text-sm font-bold text-cora">A</span>
@@ -24,11 +47,14 @@ export default function Page() {
           <div>
             <h1 className="text-base font-semibold leading-none">Agentic SDLC Office</h1>
             <p className="text-[11px] text-office-muted mt-0.5">
-              v0.1 — Mock Visual Workflow Prototype
+              v0.1 — {scenario.subtitle}
             </p>
           </div>
         </div>
-        <DemoControls />
+        <div className="flex items-center gap-4">
+          <ScenarioSelector />
+          <DemoControls />
+        </div>
       </header>
 
       <div className="grid grid-cols-[1fr_320px] gap-4">
@@ -37,16 +63,25 @@ export default function Page() {
 
           <button
             onClick={openWi}
-            className="text-left rounded-lg border border-office-line bg-office-panel/60 p-3 hover:border-white/30 transition"
+            className={`text-left rounded-lg border bg-office-panel/60 p-3 hover:border-white/30 transition ${
+              isIncident ? "border-red-500/30" : "border-office-line"
+            }`}
             aria-label="Open work item details"
           >
             <div className="flex items-start justify-between gap-3">
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
-                  <p className="text-[10px] text-office-muted uppercase tracking-wide">Work item</p>
+                  <p className="text-[10px] text-office-muted uppercase tracking-wide">
+                    {workItem.kind === "bug" ? "Bug" : "Work item"}
+                  </p>
                   <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-office-line text-office-muted">
                     {workItem.id}
                   </span>
+                  {isIncident && (
+                    <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-red-500/20 text-red-300">
+                      incident
+                    </span>
+                  )}
                 </div>
                 <p className="text-sm font-medium mt-1 truncate">{workItem.title}</p>
                 <p className="mt-1.5 text-[11px] text-office-muted">{workItem.currentPhase}</p>
@@ -55,7 +90,9 @@ export default function Page() {
                 <span className="px-1.5 py-0.5 rounded bg-office-line font-mono">
                   {workItem.status}
                 </span>
-                <span className="px-1.5 py-0.5 rounded bg-iris/20 text-iris font-mono">
+                <span className={`px-1.5 py-0.5 rounded font-mono ${
+                  isIncident ? "bg-red-500/20 text-red-300" : "bg-iris/20 text-iris"
+                }`}>
                   {workItem.currentMode}
                 </span>
                 {workItem.ownerAgentId && (
@@ -75,7 +112,11 @@ export default function Page() {
       </div>
 
       {openDecisions > 0 && (
-        <div className="fixed bottom-4 left-4 px-3 py-1.5 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-300 text-[11px] font-medium animate-pulse-soft pointer-events-none">
+        <div className={`fixed bottom-4 left-4 px-3 py-1.5 rounded-full border text-[11px] font-medium animate-pulse-soft pointer-events-none ${
+          isIncident
+            ? "bg-red-500/15 border-red-500/30 text-red-300"
+            : "bg-amber-500/15 border-amber-500/30 text-amber-300"
+        }`}>
           {openDecisions} decision{openDecisions > 1 ? "s" : ""} waiting on you
         </div>
       )}
