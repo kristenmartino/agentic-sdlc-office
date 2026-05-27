@@ -10,12 +10,12 @@ import type {
 } from "@/types/workflow-events";
 
 import { MOCK_AGENTS } from "@/data/mock-agents";
-import { MOCK_WORK_ITEMS } from "@/data/mock-work-items";
-import { MOCK_EVENTS } from "@/data/mock-events";
+import { SCENARIOS, DEFAULT_SCENARIO_ID, type ScenarioId } from "@/data/scenarios";
 
 type RunState = "idle" | "running" | "paused" | "completed";
 
 export interface OfficeState {
+  scenarioId: ScenarioId;
   agents: AgentInstance[];
   workItem: WorkItem;
   decisions: Decision[];
@@ -33,6 +33,7 @@ export interface OfficeState {
   start: () => void;
   pause: () => void;
   reset: () => void;
+  loadScenario: (id: ScenarioId) => void;
   tick: () => void;
   resolveDecision: (decisionId: string, chosenOptionId: string) => void;
   resolveApproval: (approvalId: string, granted: boolean) => void;
@@ -42,44 +43,54 @@ export interface OfficeState {
 }
 
 const initialAgents = (): AgentInstance[] => structuredClone(MOCK_AGENTS);
-const initialWorkItem = (): WorkItem => structuredClone(MOCK_WORK_ITEMS[0]);
+const initialWorkItem = (id: ScenarioId): WorkItem => structuredClone(SCENARIOS[id].initialWorkItem);
+
+function freshState(id: ScenarioId): Pick<
+  OfficeState,
+  | "scenarioId"
+  | "agents"
+  | "workItem"
+  | "decisions"
+  | "blockers"
+  | "qualityGates"
+  | "artifacts"
+  | "log"
+  | "cursor"
+  | "runState"
+  | "pendingResolutions"
+  | "selectedAgentId"
+  | "workItemDrawerOpen"
+> {
+  return {
+    scenarioId: id,
+    agents: initialAgents(),
+    workItem: initialWorkItem(id),
+    decisions: [],
+    blockers: [],
+    qualityGates: [],
+    artifacts: [],
+    log: [],
+    cursor: 0,
+    runState: "idle",
+    pendingResolutions: new Set<string>(),
+    selectedAgentId: null,
+    workItemDrawerOpen: false,
+  };
+}
 
 export const useOfficeStore = create<OfficeState>((set, get) => ({
-  agents: initialAgents(),
-  workItem: initialWorkItem(),
-  decisions: [],
-  blockers: [],
-  qualityGates: [],
-  artifacts: [],
-  log: [],
-  cursor: 0,
-  runState: "idle",
-  pendingResolutions: new Set(),
-  selectedAgentId: null,
-  workItemDrawerOpen: false,
+  ...freshState(DEFAULT_SCENARIO_ID),
 
   start: () => set({ runState: "running" }),
   pause: () => set({ runState: "paused" }),
-  reset: () =>
-    set({
-      agents: initialAgents(),
-      workItem: initialWorkItem(),
-      decisions: [],
-      blockers: [],
-      qualityGates: [],
-      artifacts: [],
-      log: [],
-      cursor: 0,
-      runState: "idle",
-      pendingResolutions: new Set(),
-      selectedAgentId: null,
-      workItemDrawerOpen: false,
-    }),
+  reset: () => set(freshState(get().scenarioId)),
+  loadScenario: (id) => set(freshState(id)),
 
   tick: () => {
     const state = get();
     if (state.runState !== "running") return;
-    const next = MOCK_EVENTS[state.cursor];
+    const events = SCENARIOS[state.scenarioId].events;
+    const next = events[state.cursor];
     if (!next) {
       set({ runState: "completed" });
       return;

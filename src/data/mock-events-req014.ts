@@ -1,19 +1,17 @@
 import type { WorkflowEvent } from "../types/workflow-events";
 import { REQ_014_ID } from "./mock-work-items";
 
-// Base timestamp + offset (ms) per step. Chosen so the script reads "real" without anchoring to wall-clock.
 const BASE = Date.parse("2026-05-26T18:00:00.000Z");
 const STEP_MS = 2500;
 const ts = (step: number) => new Date(BASE + step * STEP_MS).toISOString();
 
 let _id = 0;
-const eid = () => `evt_${String(++_id).padStart(4, "0")}`;
+const eid = () => `evt_req014_${String(++_id).padStart(4, "0")}`;
 
 const DECISION_ID = "dec_req014_tokens";
 const BLOCKER_ID = "blk_req014_tokens";
 const APPROVAL_ID = "apr_req014_merge";
 
-// Quality gate IDs (created when their passed event fires)
 const GATES = {
   intent: "gate_req014_intent",
   plan: "gate_req014_plan",
@@ -23,7 +21,6 @@ const GATES = {
   security: "gate_req014_security",
 } as const;
 
-// Artifact IDs
 const ART = {
   acceptance: "art_req014_acceptance",
   research: "art_req014_research",
@@ -35,20 +32,16 @@ const ART = {
 } as const;
 
 /**
- * Full REQ-014 mock event sequence.
- * Two pause points (reducer waits for human input after these):
- *  - `decision.requested` (token naming)
- *  - `approval.requested` (merge to main)
+ * REQ-014 — happy-path feature scenario. Piper → Nova → Theo → Iris → Mira → Tess → Rune → Cora.
+ * Two pause points: decision.requested (token naming), approval.requested (merge).
  */
-export const MOCK_EVENTS: WorkflowEvent[] = [
-  // --- Run begins ---
+export const REQ_014_EVENTS: WorkflowEvent[] = [
   { id: eid(), ts: ts(0),  actor: "system", type: "run.started", subject: REQ_014_ID, payload: {} },
   { id: eid(), ts: ts(1),  actor: "human",  type: "work_item.created", subject: REQ_014_ID,
     payload: { title: "REQ-014 — Add dark mode to dashboard" } },
   { id: eid(), ts: ts(2),  actor: "system", type: "work_item.owner.changed", subject: REQ_014_ID,
     payload: { workItemId: REQ_014_ID, from: null, to: "piper" } },
 
-  // --- Piper: Intent ---
   { id: eid(), ts: ts(3),  actor: "piper",  type: "agent.status.changed", subject: "piper",
     payload: { agentId: "piper", from: "idle", to: "reading", message: "Reading the request" } },
   { id: eid(), ts: ts(4),  actor: "piper",  type: "agent.message.sent", subject: "piper",
@@ -74,7 +67,6 @@ export const MOCK_EVENTS: WorkflowEvent[] = [
   { id: eid(), ts: ts(10), actor: "piper",  type: "handoff.requested", subject: REQ_014_ID,
     payload: { fromAgentId: "piper", toAgentId: "nova" } },
 
-  // --- Nova: Research ---
   { id: eid(), ts: ts(11), actor: "nova",   type: "handoff.accepted", subject: REQ_014_ID,
     payload: { fromAgentId: "piper", toAgentId: "nova" } },
   { id: eid(), ts: ts(12), actor: "system", type: "work_item.owner.changed", subject: REQ_014_ID,
@@ -92,7 +84,6 @@ export const MOCK_EVENTS: WorkflowEvent[] = [
   { id: eid(), ts: ts(17), actor: "nova",   type: "handoff.requested", subject: REQ_014_ID,
     payload: { fromAgentId: "nova", toAgentId: "theo" } },
 
-  // --- Theo: Architecture (raises a decision) ---
   { id: eid(), ts: ts(18), actor: "theo",   type: "handoff.accepted", subject: REQ_014_ID,
     payload: { fromAgentId: "nova", toAgentId: "theo" } },
   { id: eid(), ts: ts(19), actor: "system", type: "work_item.owner.changed", subject: REQ_014_ID,
@@ -123,9 +114,7 @@ export const MOCK_EVENTS: WorkflowEvent[] = [
       recommendation: "a",
       reversible: "partially",
     } } },
-  // --- PAUSE 1: reducer waits for matching decision.resolved from human ---
 
-  // (Theo blocked, Mira blocked-on-agent while waiting)
   { id: eid(), ts: ts(24), actor: "theo",   type: "blocker.raised", subject: REQ_014_ID,
     payload: { blocker: { id: BLOCKER_ID, workItemId: REQ_014_ID, raisedBy: "theo",
       kind: "decision_needed", description: "Cannot finalize tokens without naming decision." } } },
@@ -136,8 +125,6 @@ export const MOCK_EVENTS: WorkflowEvent[] = [
   { id: eid(), ts: ts(27), actor: "cora",   type: "agent.status.changed", subject: "cora",
     payload: { agentId: "cora", from: "idle", to: "working", message: "Routing decision to inbox" } },
 
-  // --- Resolve placeholder (the reducer emits this when the human clicks Resolve in the inbox).
-  //     Including it here lets the script be replayed deterministically without UI. ---
   { id: eid(), ts: ts(28), actor: "human",  type: "decision.resolved", subject: DECISION_ID,
     payload: { decisionId: DECISION_ID, chosenOptionId: "a", resolvedBy: "human" } },
   { id: eid(), ts: ts(29), actor: "system", type: "blocker.cleared", subject: REQ_014_ID,
@@ -152,7 +139,6 @@ export const MOCK_EVENTS: WorkflowEvent[] = [
   { id: eid(), ts: ts(33), actor: "theo",   type: "handoff.requested", subject: REQ_014_ID,
     payload: { fromAgentId: "theo", toAgentId: "iris" } },
 
-  // --- Iris: UI Design ---
   { id: eid(), ts: ts(34), actor: "iris",   type: "handoff.accepted", subject: REQ_014_ID,
     payload: { fromAgentId: "theo", toAgentId: "iris" } },
   { id: eid(), ts: ts(35), actor: "system", type: "work_item.owner.changed", subject: REQ_014_ID,
@@ -171,7 +157,6 @@ export const MOCK_EVENTS: WorkflowEvent[] = [
   { id: eid(), ts: ts(40), actor: "iris",   type: "handoff.requested", subject: REQ_014_ID,
     payload: { fromAgentId: "iris", toAgentId: "mira" } },
 
-  // --- Mira: Build ---
   { id: eid(), ts: ts(41), actor: "mira",   type: "handoff.accepted", subject: REQ_014_ID,
     payload: { fromAgentId: "iris", toAgentId: "mira" } },
   { id: eid(), ts: ts(42), actor: "system", type: "work_item.owner.changed", subject: REQ_014_ID,
@@ -190,7 +175,6 @@ export const MOCK_EVENTS: WorkflowEvent[] = [
   { id: eid(), ts: ts(47), actor: "mira",   type: "handoff.requested", subject: REQ_014_ID,
     payload: { fromAgentId: "mira", toAgentId: "tess" } },
 
-  // --- Tess: QA ---
   { id: eid(), ts: ts(48), actor: "tess",   type: "handoff.accepted", subject: REQ_014_ID,
     payload: { fromAgentId: "mira", toAgentId: "tess" } },
   { id: eid(), ts: ts(49), actor: "system", type: "work_item.owner.changed", subject: REQ_014_ID,
@@ -211,7 +195,6 @@ export const MOCK_EVENTS: WorkflowEvent[] = [
   { id: eid(), ts: ts(55), actor: "tess",   type: "handoff.requested", subject: REQ_014_ID,
     payload: { fromAgentId: "tess", toAgentId: "rune" } },
 
-  // --- Rune: Review ---
   { id: eid(), ts: ts(56), actor: "rune",   type: "handoff.accepted", subject: REQ_014_ID,
     payload: { fromAgentId: "tess", toAgentId: "rune" } },
   { id: eid(), ts: ts(57), actor: "system", type: "work_item.owner.changed", subject: REQ_014_ID,
@@ -230,7 +213,6 @@ export const MOCK_EVENTS: WorkflowEvent[] = [
   { id: eid(), ts: ts(62), actor: "rune",   type: "handoff.requested", subject: REQ_014_ID,
     payload: { fromAgentId: "rune", toAgentId: "cora" } },
 
-  // --- Cora: route to human for merge ---
   { id: eid(), ts: ts(63), actor: "cora",   type: "handoff.accepted", subject: REQ_014_ID,
     payload: { fromAgentId: "rune", toAgentId: "cora" } },
   { id: eid(), ts: ts(64), actor: "system", type: "work_item.owner.changed", subject: REQ_014_ID,
@@ -247,7 +229,6 @@ export const MOCK_EVENTS: WorkflowEvent[] = [
       level: "P7",
       raisedBy: "cora",
     } } },
-  // --- PAUSE 2: reducer waits for matching approval.resolved from human ---
 
   { id: eid(), ts: ts(68), actor: "human",  type: "approval.resolved", subject: APPROVAL_ID,
     payload: { approvalId: APPROVAL_ID, granted: true, resolvedBy: "human" } },
@@ -257,8 +238,3 @@ export const MOCK_EVENTS: WorkflowEvent[] = [
     payload: { workItemId: REQ_014_ID } },
   { id: eid(), ts: ts(71), actor: "system", type: "run.completed", subject: REQ_014_ID, payload: {} },
 ];
-
-/** Returns true if the reducer should pause after applying this event (waiting for human input). */
-export function isPausePoint(event: WorkflowEvent): boolean {
-  return event.type === "decision.requested" || event.type === "approval.requested";
-}
