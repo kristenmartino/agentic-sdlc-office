@@ -9,14 +9,30 @@ export default function DecisionInbox() {
 
   const open = decisions.filter((d) => !d.resolved);
 
+  const hasOpen = open.length > 0;
+
   return (
-    <section className="rounded-lg border border-office-line bg-office-panel/80 p-3" aria-label="Decision inbox">
+    <section
+      className={`rounded-lg border bg-office-panel/80 p-3 transition-all ${
+        hasOpen
+          ? "border-amber-500/40 shadow-[0_0_18px_rgba(245,158,11,0.10)]"
+          : "border-office-line"
+      }`}
+      aria-label="Decision inbox"
+    >
       <header className="flex items-center justify-between mb-2">
-        <h2 className="text-xs font-semibold uppercase tracking-wide">Decision Inbox</h2>
-        <span className="text-[10px] text-office-muted">{open.length} open</span>
+        <h2 className="text-xs font-semibold uppercase tracking-wide flex items-center gap-2">
+          Decision Inbox
+          {hasOpen && (
+            <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse-soft" aria-hidden />
+          )}
+        </h2>
+        <span className={`text-[10px] font-mono ${hasOpen ? "text-amber-300" : "text-office-muted"}`}>
+          {open.length} open
+        </span>
       </header>
       {open.length === 0 && (
-        <p className="text-xs text-office-muted">No decisions waiting.</p>
+        <p className="text-xs text-office-muted italic">No decisions waiting — the office is moving on its own.</p>
       )}
       <ul className="flex flex-col gap-3">
         {open.map((d) => {
