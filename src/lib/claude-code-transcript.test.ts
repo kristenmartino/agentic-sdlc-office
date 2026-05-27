@@ -4,8 +4,11 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 import {
   parseRawTranscript,
+  validateRawTranscript,
+  validateRawTranscriptLine,
   type RawAssistantMessage,
   type RawSummaryLine,
+  type RawTranscriptIssue,
   type RawUserMessage,
   type ToolUseBlock,
 } from "./claude-code-transcript";
@@ -85,5 +88,135 @@ describe("claude-code-transcript-sample.jsonl (synthetic fixture)", () => {
     expect(summary).toBeDefined();
     expect(summary.sessionId).toBe("sample-session-0000");
     expect(summary.summary.length).toBeGreaterThan(0);
+  });
+});
+
+describe("validateRawTranscript", () => {
+  function validate(jsonl: string): RawTranscriptIssue[] {
+    return validateRawTranscript(parseRawTranscript(jsonl));
+  }
+
+  it("returns no issues for the synthetic fixture", () => {
+    const issues = validateRawTranscript(parseRawTranscript(fixtureJsonl()));
+    expect(issues, JSON.stringify(issues, null, 2)).toEqual([]);
+  });
+
+  it("flags unknown line.type values", () => {
+    const issues = validate('{"type":"meta"}');
+    expect(issues.some((i) => i.field === "type" && i.message.includes("unknown line.type: 'meta'"))).toBe(true);
+  });
+
+  it("flags a user message missing the message object", () => {
+    const issues = validate('{"type":"user"}');
+    expect(issues.some((i) => i.message.includes("user line is missing 'message' object"))).toBe(true);
+  });
+
+  it("flags a user message.role that isn't 'user'", () => {
+    const issues = validate('{"type":"user","message":{"role":"assistant","content":"hi"}}');
+    expect(issues.some((i) => i.field === "message.role" && i.message.includes("expected 'user'"))).toBe(true);
+  });
+
+  it("flags an assistant message.content that isn't an array", () => {
+    const issues = validate('{"type":"assistant","message":{"role":"assistant","content":"oops"}}');
+    expect(issues.some((i) => i.field === "message.content" && i.message.includes("expected array"))).toBe(true);
+  });
+
+  it("flags an unknown content block type", () => {
+    const issues = validate(
+      '{"type":"assistant","message":{"role":"assistant","content":[{"type":"voice","data":"x"}]}}',
+    );
+    expect(issues.some((i) => i.field === "message.content[0].type" && i.message.includes("unknown content block type: 'voice'"))).toBe(true);
+  });
+
+  it("flags a tool_use missing id", () => {
+    const issues = validate(
+      '{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","name":"Read","input":{}}]}}',
+    );
+    expect(issues.some((i) => i.field === "message.content[0].id" && i.message.includes("non-empty string"))).toBe(true);
+  });
+
+  it("flags a tool_use missing name", () => {
+    const issues = validate(
+      '{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"t1","input":{}}]}}',
+    );
+    expect(issues.some((i) => i.field === "message.content[0].name" && i.message.includes("non-empty string"))).toBe(true);
+  });
+
+  it("flags a tool_use whose input is not an object", () => {
+    const issues = validate(
+      '{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"Read","input":"oops"}]}}',
+    );
+    expect(issues.some((i) => i.field === "message.content[0].input" && i.message.includes("must be an object"))).toBe(true);
+  });
+
+  it("flags a tool_result missing tool_use_id", () => {
+    const issues = validate(
+      '{"type":"user","message":{"role":"user","content":[{"type":"tool_result","content":"x"}]}}',
+    );
+    expect(issues.some((i) => i.field === "message.content[0].tool_use_id" && i.message.includes("non-empty string"))).toBe(true);
+  });
+
+  it("flags a tool_result with wrong content type", () => {
+    const issues = validate(
+      '{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t1","content":42}]}}',
+    );
+    expect(issues.some((i) => i.field === "message.content[0].content" && i.message.includes("must be string or content[]"))).toBe(true);
+  });
+
+  it("flags a tool_result with non-boolean is_error", () => {
+    const issues = validate(
+      '{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t1","content":"x","is_error":"yes"}]}}',
+    );
+    expect(issues.some((i) => i.field === "message.content[0].is_error" && i.message.includes("must be boolean"))).toBe(true);
+  });
+
+  it("flags a thinking block missing the thinking field", () => {
+    const issues = validate(
+      '{"type":"assistant","message":{"role":"assistant","content":[{"type":"thinking"}]}}',
+    );
+    expect(issues.some((i) => i.field === "message.content[0].thinking" && i.message.includes("string 'thinking' field"))).toBe(true);
+  });
+
+  it("flags a summary line missing the summary field", () => {
+    const issues = validate('{"type":"summary"}');
+    expect(issues.some((i) => i.field === "summary"))
+      .toBe(true);
+  });
+
+  it("flags a non-ISO timestamp on the envelope", () => {
+    const issues = validate('{"type":"summary","summary":"x","timestamp":"yesterday"}');
+    expect(issues.some((i) => i.field === "timestamp" && i.message.includes("ISO 8601"))).toBe(true);
+  });
+
+  it("flags a non-string-or-null parentUuid", () => {
+    const issues = validate('{"type":"summary","summary":"x","parentUuid":42}');
+    expect(issues.some((i) => i.field === "parentUuid" && i.message.includes("string | null"))).toBe(true);
+  });
+
+  it("system lines are permissive — unknown subtypes are fine", () => {
+    const issues = validate('{"type":"system","subtype":"something_unknown","data":{"x":1}}');
+    expect(issues).toEqual([]);
+  });
+
+  it("validates nested content blocks inside a tool_result content array", () => {
+    const issues = validate(
+      '{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t1","content":[{"type":"voice"}]}]}}',
+    );
+    expect(issues.some((i) => i.field === "message.content[0].content[0].type" && i.message.includes("unknown content block type: 'voice'"))).toBe(true);
+  });
+
+  it("reports the 1-based lineIndex of the offending line", () => {
+    const issues: RawTranscriptIssue[] = [];
+    validateRawTranscriptLine({ type: "meta" }, 7, issues);
+    expect(issues[0].lineIndex).toBe(7);
+  });
+
+  it("treats null and primitives as 'line is not an object'", () => {
+    const issues: RawTranscriptIssue[] = [];
+    validateRawTranscriptLine(null, 1, issues);
+    validateRawTranscriptLine("hello", 2, issues);
+    expect(issues).toHaveLength(2);
+    expect(issues[0].message).toContain("got null");
+    expect(issues[1].message).toContain("got string");
   });
 });
