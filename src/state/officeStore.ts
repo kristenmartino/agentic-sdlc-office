@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { persist, createJSONStorage } from "zustand/middleware";
 import type { AgentId, AgentInstance } from "@/types/agents";
 import type { Artifact, WorkItem, ModeChange } from "@/types/work-items";
 import type { Decision, Blocker, QualityGate } from "@/types/governance";
@@ -11,6 +12,9 @@ import type {
 
 import { MOCK_AGENTS } from "@/data/mock-agents";
 import { SCENARIOS, DEFAULT_SCENARIO_ID, type ScenarioId } from "@/data/scenarios";
+
+const STORAGE_NAME = "agentic-sdlc-office";
+const STORAGE_VERSION = 1;
 
 type RunState = "idle" | "running" | "paused" | "completed";
 
@@ -35,6 +39,7 @@ export interface OfficeState {
   reset: () => void;
   loadScenario: (id: ScenarioId) => void;
   tick: () => void;
+  seekTo: (targetCursor: number) => void;
   resolveDecision: (decisionId: string, chosenOptionId: string) => void;
   resolveApproval: (approvalId: string, granted: boolean) => void;
   selectAgent: (id: AgentId | null) => void;
@@ -78,68 +83,153 @@ function freshState(id: ScenarioId): Pick<
   };
 }
 
-export const useOfficeStore = create<OfficeState>((set, get) => ({
-  ...freshState(DEFAULT_SCENARIO_ID),
+export const useOfficeStore = create<OfficeState>()(
+  persist(
+    (set, get) => ({
+      ...freshState(DEFAULT_SCENARIO_ID),
 
-  start: () => set({ runState: "running" }),
-  pause: () => set({ runState: "paused" }),
-  reset: () => set(freshState(get().scenarioId)),
-  loadScenario: (id) => set(freshState(id)),
+      start: () => set({ runState: "running" }),
+      pause: () => set({ runState: "paused" }),
+      reset: () => set(freshState(get().scenarioId)),
+      loadScenario: (id) => set(freshState(id)),
 
-  tick: () => {
-    const state = get();
-    if (state.runState !== "running") return;
-    const events = SCENARIOS[state.scenarioId].events;
-    const next = events[state.cursor];
-    if (!next) {
-      set({ runState: "completed" });
-      return;
-    }
-    // Wait for human input on resolved events
-    if (next.type === "decision.resolved" || next.type === "approval.resolved") {
-      if (!state.pendingResolutions.has(next.subject)) return;
-    }
-    set(applyEvent(state, next));
-  },
+      tick: () => {
+        const state = get();
+        if (state.runState !== "running") return;
+        const events = SCENARIOS[state.scenarioId].events;
+        const next = events[state.cursor];
+        if (!next) {
+          set({ runState: "completed" });
+          return;
+        }
+        // Wait for human input on resolved events
+        if (next.type === "decision.resolved" || next.type === "approval.resolved") {
+          if (!state.pendingResolutions.has(next.subject)) return;
+        }
+        set(applyEvent(state, next));
+      },
 
-  resolveDecision: (decisionId, chosenOptionId) =>
-    set((s) => {
-      const pending = new Set(s.pendingResolutions);
-      pending.add(decisionId);
-      return {
-        decisions: s.decisions.map((d) =>
-          d.id === decisionId
-            ? { ...d, resolved: true, chosenOptionId, resolvedBy: "human", resolvedAt: new Date().toISOString() }
-            : d
-        ),
-        pendingResolutions: pending,
-      };
+      seekTo: (targetCursor) => {
+        const state = get();
+        const events = SCENARIOS[state.scenarioId].events;
+        const target = Math.max(0, Math.min(targetCursor, events.length));
+
+        // Pre-populate pending resolutions so any *.resolved events in range apply.
+        const pending = new Set<string>();
+        for (let i = 0; i < target; i++) {
+          const e = events[i];
+          if (e.type === "decision.resolved" || e.type === "approval.resolved") {
+            pending.add(e.subject);
+          }
+        }
+
+        // Start from a fresh scenario state, keep the actions from current store.
+        let next: OfficeState = {
+          ...state,
+          ...freshState(state.scenarioId),
+          pendingResolutions: pending,
+        };
+
+        for (let i = 0; i < target; i++) {
+          const patch = applyEvent(next, events[i]);
+          next = { ...next, ...patch };
+        }
+
+        set({ ...next, runState: target >= events.length ? "completed" : "paused" });
+      },
+
+      resolveDecision: (decisionId, chosenOptionId) =>
+        set((s) => {
+          const pending = new Set(s.pendingResolutions);
+          pending.add(decisionId);
+          return {
+            decisions: s.decisions.map((d) =>
+              d.id === decisionId
+                ? { ...d, resolved: true, chosenOptionId, resolvedBy: "human", resolvedAt: new Date().toISOString() }
+                : d
+            ),
+            pendingResolutions: pending,
+          };
+        }),
+
+      resolveApproval: (approvalId, granted) =>
+        set((s) => {
+          const pending = new Set(s.pendingResolutions);
+          pending.add(approvalId);
+          return {
+            decisions: s.decisions.map((d) =>
+              d.id === approvalId
+                ? {
+                    ...d,
+                    resolved: true,
+                    chosenOptionId: granted ? "approve" : "deny",
+                    resolvedBy: "human",
+                    resolvedAt: new Date().toISOString(),
+                  }
+                : d
+            ),
+            pendingResolutions: pending,
+          };
+        }),
+
+      selectAgent: (id) => set({ selectedAgentId: id }),
+      openWorkItemDrawer: () => set({ workItemDrawerOpen: true }),
+      closeWorkItemDrawer: () => set({ workItemDrawerOpen: false }),
     }),
+    {
+      name: STORAGE_NAME,
+      version: STORAGE_VERSION,
+      storage: createJSONStorage(() =>
+        typeof window === "undefined" ? (noopStorage as unknown as Storage) : localStorage
+      ),
+      partialize: (state) => ({
+        scenarioId: state.scenarioId,
+        agents: state.agents,
+        workItem: state.workItem,
+        decisions: state.decisions,
+        blockers: state.blockers,
+        qualityGates: state.qualityGates,
+        artifacts: state.artifacts,
+        log: state.log,
+        cursor: state.cursor,
+        // Set → Array for JSON
+        pendingResolutions: Array.from(state.pendingResolutions),
+        // Omit: runState (forced on rehydrate), selectedAgentId, workItemDrawerOpen (UI transient)
+      }),
+      merge: (persisted, current) => {
+        if (!persisted || typeof persisted !== "object") return current;
+        const p = persisted as Record<string, unknown>;
+        const pendingArray = Array.isArray(p.pendingResolutions)
+          ? (p.pendingResolutions as string[])
+          : [];
+        const log = Array.isArray(p.log) ? (p.log as WorkflowEvent[]) : [];
+        return {
+          ...current,
+          ...(p as Partial<OfficeState>),
+          pendingResolutions: new Set<string>(pendingArray),
+          // Force runState on rehydrate: paused if mid-run, completed if finished, idle otherwise.
+          runState:
+            log.length === 0
+              ? "idle"
+              : SCENARIOS[(p.scenarioId as ScenarioId) ?? DEFAULT_SCENARIO_ID].events.length ===
+                (p.cursor as number)
+              ? "completed"
+              : "paused",
+          // Reset transient UI on refresh
+          selectedAgentId: null,
+          workItemDrawerOpen: false,
+        };
+      },
+    }
+  )
+);
 
-  resolveApproval: (approvalId, granted) =>
-    set((s) => {
-      const pending = new Set(s.pendingResolutions);
-      pending.add(approvalId);
-      return {
-        decisions: s.decisions.map((d) =>
-          d.id === approvalId
-            ? {
-                ...d,
-                resolved: true,
-                chosenOptionId: granted ? "approve" : "deny",
-                resolvedBy: "human",
-                resolvedAt: new Date().toISOString(),
-              }
-            : d
-        ),
-        pendingResolutions: pending,
-      };
-    }),
-
-  selectAgent: (id) => set({ selectedAgentId: id }),
-  openWorkItemDrawer: () => set({ workItemDrawerOpen: true }),
-  closeWorkItemDrawer: () => set({ workItemDrawerOpen: false }),
-}));
+// SSR fallback: no-op storage so persist's initial pass doesn't crash during build.
+const noopStorage = {
+  getItem: () => null,
+  setItem: () => {},
+  removeItem: () => {},
+};
 
 /** Apply a single event to state. Pure with respect to its inputs. */
 function applyEvent(state: OfficeState, event: WorkflowEvent): Partial<OfficeState> {
