@@ -346,6 +346,47 @@ describe("mapper output structure", () => {
   });
 });
 
+describe("mapper — new line types pass through as no-ops", () => {
+  // PR #23 (#45 in reviewer numbering): the 6 new line types are accepted
+  // by the validator but the mapper walks past them. PR #46 will start
+  // consuming pr-link as an artifact and ai-title/custom-title as title
+  // fallbacks; until then, the mapper must not emit anything for them
+  // beyond the standard run.started + work_item.* + run.completed.
+  it("ai-title / custom-title / last-prompt / pr-link / attachment / queue-operation produce no extra events", () => {
+    const sessionWithoutNewTypes = mapTranscriptToSession([
+      systemInit(),
+      userPrompt("hello"),
+      assistantText("done"),
+    ]);
+
+    const sessionWithNewTypes = mapTranscriptToSession([
+      systemInit(),
+      { type: "ai-title", aiTitle: "test session", sessionId: SID } as RawTranscriptLine,
+      { type: "custom-title", customTitle: "my session", sessionId: SID } as RawTranscriptLine,
+      userPrompt("hello"),
+      { type: "last-prompt", lastPrompt: "hello", leafUuid: "u-0001", sessionId: SID } as RawTranscriptLine,
+      assistantText("done"),
+      {
+        type: "pr-link",
+        prNumber: 42,
+        prUrl: "https://github.com/example/repo/pull/42",
+        prRepository: "example/repo",
+        sessionId: SID,
+      } as RawTranscriptLine,
+      {
+        type: "attachment",
+        attachment: { name: "screenshot.png" },
+        uuid: "u-att",
+        sessionId: SID,
+        timestamp: T0,
+      } as RawTranscriptLine,
+      { type: "queue-operation", operation: "model_swap", sessionId: SID } as RawTranscriptLine,
+    ]);
+
+    expect(sessionWithNewTypes.events.length).toBe(sessionWithoutNewTypes.events.length);
+  });
+});
+
 describe("validateRawTranscript runs cleanly on parsed fixture", () => {
   // Sanity: confirms the mapper isn't masking validator misses.
   it("synthetic fixture validates clean before mapping", () => {
