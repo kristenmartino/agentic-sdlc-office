@@ -1,5 +1,6 @@
 "use client";
 
+import { motion } from "framer-motion";
 import type { AgentInstance } from "@/types/agents";
 import { useOfficeStore } from "@/state/officeStore";
 import StatusBubble from "./StatusBubble";
@@ -16,7 +17,11 @@ export default function AgentSprite({ agent }: Props) {
   const active = agent.status !== "idle" && agent.status !== "done";
 
   return (
-    <button
+    <motion.button
+      // layoutId makes Framer Motion animate this sprite when it remounts in a different room
+      // (i.e. when an agent.moved event fires and the parent Room changes).
+      layoutId={`agent-${agent.id}`}
+      transition={{ type: "spring", stiffness: 300, damping: 30 }}
       onClick={() => select(agent.id)}
       className={`relative flex flex-col items-center gap-1 focus:outline-none rounded-md p-0.5 ${
         selected ? "ring-2 ring-white/40" : ""
@@ -39,6 +44,6 @@ export default function AgentSprite({ agent }: Props) {
         {agent.name}
       </span>
       <StatusBubble status={agent.status} message={agent.message} />
-    </button>
+    </motion.button>
   );
 }

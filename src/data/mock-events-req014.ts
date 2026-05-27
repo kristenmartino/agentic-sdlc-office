@@ -237,4 +237,21 @@ export const REQ_014_EVENTS: WorkflowEvent[] = [
   { id: eid(), ts: ts(70), actor: "system", type: "work_item.completed", subject: REQ_014_ID,
     payload: { workItemId: REQ_014_ID } },
   { id: eid(), ts: ts(71), actor: "system", type: "run.completed", subject: REQ_014_ID, payload: {} },
+
+  // --- Movement choreography ---
+  // Theo: physically goes to the Human Office while waiting on the human, then returns when done.
+  { id: eid(), ts: ts(25.5), actor: "theo", type: "agent.moved", subject: "theo",
+    payload: { agentId: "theo", from: "architecture-design", to: "human-office" } },
+  { id: eid(), ts: ts(31.5), actor: "theo", type: "agent.moved", subject: "theo",
+    payload: { agentId: "theo", from: "human-office", to: "architecture-design" } },
+
+  // Cora as courier for the merge approval: she leaves the Human Office to retrieve Rune's
+  // review before surfacing the approval ask to the human.
+  { id: eid(), ts: ts(63.5), actor: "cora", type: "agent.moved", subject: "cora",
+    payload: { agentId: "cora", from: "human-office", to: "review-security" } },
+  { id: eid(), ts: ts(65.5), actor: "cora", type: "agent.moved", subject: "cora",
+    payload: { agentId: "cora", from: "review-security", to: "human-office" } },
 ];
+
+// Sort by timestamp so play order interleaves the inserted movement events correctly.
+REQ_014_EVENTS.sort((a, b) => a.ts.localeCompare(b.ts));
