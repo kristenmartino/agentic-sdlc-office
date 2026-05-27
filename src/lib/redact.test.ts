@@ -18,6 +18,25 @@ describe("redactHomePaths", () => {
       .toBe("failed at /<HOME>/project/file.py");
   });
 
+  it("redacts /root (the bare root-user home)", () => {
+    expect(redactHomePaths("failed at /root/project/file.ts"))
+      .toBe("failed at /<HOME>/project/file.ts");
+  });
+
+  it("redacts /root with no path tail", () => {
+    expect(redactHomePaths("cd /root && ls"))
+      .toBe("cd /<HOME> && ls");
+  });
+
+  it("does NOT redact /root inside a longer word like /rooted or /rootage", () => {
+    // The boundary check protects unrelated paths that happen to start
+    // with the same four letters.
+    expect(redactHomePaths("/rootage/of/the/issue"))
+      .toBe("/rootage/of/the/issue");
+    expect(redactHomePaths("/rooted-cause/x"))
+      .toBe("/rooted-cause/x");
+  });
+
   it("redacts Windows C:\\Users\\<name>\\", () => {
     expect(redactHomePaths("failed at C:\\Users\\bob\\projects\\app.ts"))
       .toBe("failed at C:\\Users\\<HOME>\\projects\\app.ts");

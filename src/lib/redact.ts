@@ -34,6 +34,10 @@ export function redactHomePaths(text: string): string {
   return text
     .replace(/\/Users\/[^/\s]+/g, "/<HOME>")
     .replace(/\/home\/[^/\s]+/g, "/<HOME>")
+    // `/root` is the root user's home — bare, no `<name>` segment.
+    // Replace only when it's a path component (followed by `/` or a word
+    // boundary), not when it appears mid-word like `/rooted` or `/rootage`.
+    .replace(/\/root(?=\/|\b)/g, "/<HOME>")
     .replace(/\b[A-Z]:\\Users\\[^\\\s]+/g, "C:\\Users\\<HOME>");
 }
 
