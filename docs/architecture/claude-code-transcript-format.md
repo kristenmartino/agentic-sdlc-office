@@ -104,18 +104,31 @@ An assistant line contains one or more content blocks:
 }
 ```
 
-Mapping to office events (v0.2 work):
+Mapping to office events (as of PR #24 / v0.2):
 
-| Block | Office event |
+| Block | Trigger | Office event |
+| --- | --- | --- |
+| `text` | assistant turn | `agent.message.sent` (actor = the office agent representing this session) |
+| `tool_use` (Read/Glob/Grep) | assistant turn | `agent.status.changed → reading` |
+| `tool_use` (Edit/Write/MultiEdit) | assistant turn | `agent.status.changed → coding`; **artifact emitted on the matching tool_result**, using `toolUseResult.filePath` as the ref when available |
+| `tool_use` (Bash with run) | assistant turn | `agent.message.sent` with `$ <command>`; status → `testing` if the command matches test/build/typecheck patterns |
+| `tool_result` (Bash) | user turn | `quality_gate.passed` for clean test/build success; `quality_gate.failed` on `is_error: true`, `toolUseResult.interrupted: true`, or stderr matching hard-failure language (`error`/`failed`/`fatal`/`FAIL`/etc.) — status → `failed` on any of those |
+| `tool_result` (Edit/Write/MultiEdit) | user turn | `artifact.produced` (kind `code_pr`); summary uses `structuredPatch` hunk count and `replaceAll` flag without exposing raw content |
+| `thinking` | anywhere | **ignored / redacted by default.** The office never displays raw thinking content. If a future feature needs to surface rationale, generate a short summary separately — never pass the raw `thinking` field through to a rendered surface. |
+| anything else | — | log-only / informational |
+
+Per-line-type table (the 6 line types added after PR #44's discovery):
+
+| `type` | Mapping |
 | --- | --- |
-| `text` | `agent.message.sent` (actor = the office agent representing this session) |
-| `tool_use` (Edit/Write/MultiEdit) | `artifact.produced` (kind = `code_pr`) |
-| `tool_use` (Bash with run) | `agent.message.sent` with the command summary |
-| `tool_use` (Read/Glob/Grep) | log-only / informational |
-| `thinking` | **ignored / redacted by default.** The office never displays raw thinking content in the UI. If a future feature needs to surface rationale, generate a short summary separately — never pass the raw `thinking` field through to a rendered surface. |
-| anything else | log-only / informational |
+| `ai-title` | Used in title hierarchy as a fallback (no user prompt, no custom-title) |
+| `custom-title` | Overrides every other title source |
+| `pr-link` | `artifact.produced` (kind `code_pr`, ref = `prUrl`, summary names the PR number + repo) |
+| `last-prompt` | log-only — UUID pointer, no rendered output |
+| `attachment` | log-only — attachment payload is opaque, never rendered |
+| `queue-operation` | log-only — internal queue state |
 
-The exact mapping rules and the office-agent assignment are deferred to v0.2.
+**Title hierarchy:** `custom-title` > first user string prompt > `ai-title` > `"Observed Claude Code session"` placeholder.
 
 ## System lines
 
