@@ -83,14 +83,10 @@
       "Bash(git branch:*)",
       "Bash(git fetch:*)",
       "Bash(git pull:*)",
-      "Bash(git rebase:*)",
-      "Bash(git stash:*)",
       "Bash(gh issue view:*)",
       "Bash(gh issue list:*)",
       "Bash(gh issue create:*)",
       "Bash(gh issue comment:*)",
-      "Bash(gh issue edit:*)",
-      "Bash(gh issue close:*)",
       "Bash(gh pr view:*)",
       "Bash(gh pr list:*)",
       "Bash(gh pr create:*)",
@@ -106,7 +102,6 @@
       "Bash(find:*)",
       "Bash(rg:*)",
       "Bash(echo:*)",
-      "Bash(node:*)",
       "Bash(which:*)"
     ]
   },
