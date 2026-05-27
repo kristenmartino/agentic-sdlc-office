@@ -117,7 +117,7 @@ Mapping to office events (as of PR #24 / v0.2):
 | `thinking` | anywhere | **ignored / redacted by default.** The office never displays raw thinking content. If a future feature needs to surface rationale, generate a short summary separately — never pass the raw `thinking` field through to a rendered surface. |
 | anything else | — | log-only / informational |
 
-Per-line-type table (the 6 line types added after PR #44's discovery):
+Per-line-type table (the 6 line types added after the real-transcript discovery):
 
 | `type` | Mapping |
 | --- | --- |
@@ -129,6 +129,26 @@ Per-line-type table (the 6 line types added after PR #44's discovery):
 | `queue-operation` | log-only — internal queue state |
 
 **Title hierarchy:** `custom-title` > first user string prompt > `ai-title` > `"Observed Claude Code session"` placeholder.
+
+System subtypes:
+
+| `subtype` | Mapping |
+| --- | --- |
+| `init` | Seeds origin (sessionId, capturedAt); used by `newContext()` |
+| `compact_boundary` | `agent.message.sent` marker ("Conversation compacted") so the activity-log seam is visible |
+| `api_error` | `blocker.raised` (kind: `external`) — only if the work item is seeded |
+| `stop_hook_summary` with `hookErrors.length > 0` | `blocker.raised` (kind: `external`) |
+| `stop_hook_summary` with `preventedContinuation: true` | `blocker.raised` (kind: `gate_failed`) |
+| `stop_hook_summary` with neither | log-only (no event) |
+
+High-signal tool mappings (beyond Read/Edit/Bash):
+
+| Tool | Mapping |
+| --- | --- |
+| `mcp__<server>__<tool>` | `agent.message.sent` ("MCP action via `<server>`") — input/output never rendered |
+| `Task` / `TaskCreate` / `TaskUpdate` | `agent.message.sent` ("<tool> observed (task state change)") — payload never rendered |
+| `AskUserQuestion` | `agent.message.sent` ("Asked the human a question (observed; not surfaced as a decision)") — **never `decision.requested`** because observed mode is read-only; question content never rendered |
+| Other / unknown tools (WebFetch, ToolSearch, etc.) | log-only — the model's text block already summarises what happened |
 
 ## System lines
 
@@ -170,6 +190,18 @@ A few things the office model wants live outside the transcript:
   state, not something to render. The mapper drops `thinking` blocks; if a
   future feature needs to surface rationale, it generates a short summary
   separately rather than passing the raw `thinking` field through to a rendered surface.
+- **Bash stderr is sanitised before display.** `quality_gate.failed.notes`
+  is filtered through [`sanitizeForNotes()`](../../src/lib/redact.ts), which
+  redacts `/Users/<name>` and `/home/<name>` paths to `/<HOME>/`, redacts
+  GitHub URLs to `https://github.com/<org>/<repo>/...`, takes only the first
+  line, and truncates to 120 chars. The `interrupted: true` case bypasses
+  stderr entirely with a fixed label.
+- **Tool inputs are never rendered** for MCP, Task, TaskCreate, TaskUpdate,
+  AskUserQuestion. The mapper emits a category summary; the actual input
+  payload (page selectors, task descriptions, question text, options) stays
+  out of office events.
+- **Attachment payloads are opaque** to the validator and the mapper —
+  no part of an attachment ever reaches a rendered surface.
 
 ## Status
 
