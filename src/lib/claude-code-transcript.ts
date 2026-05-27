@@ -1,3 +1,5 @@
+import { isIsoTimestamp } from "./runtime-unions";
+
 /**
  * Types for raw Claude Code transcript lines.
  *
@@ -163,6 +165,12 @@ export function parseRawTranscript(jsonl: string): RawTranscriptLine[] {
 // Like the scenario validator, this one collects issues and returns them — it
 // does not throw. Callers decide whether one bad line aborts the import.
 
+// VALID_LINE_TYPES and VALID_BLOCK_TYPES stay co-located with their type defs
+// (above in this file) rather than moving to runtime-unions.ts: the union types
+// live here, and importing them into runtime-unions would create a circular
+// dep. The ISO 8601 check is the only piece that genuinely belonged elsewhere
+// — it's now imported from runtime-unions below.
+
 const VALID_LINE_TYPES: ReadonlySet<RawTranscriptLine["type"]> = new Set([
   "system",
   "user",
@@ -176,10 +184,6 @@ const VALID_BLOCK_TYPES: ReadonlySet<ContentBlock["type"]> = new Set([
   "tool_result",
   "thinking",
 ]);
-
-const ISO_8601_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:?\d{2})$/;
-const isIsoTimestamp = (v: unknown): v is string =>
-  typeof v === "string" && ISO_8601_RE.test(v) && !Number.isNaN(Date.parse(v));
 
 export interface RawTranscriptIssue {
   /** 1-based index into the input array — matches what a human would say. */
