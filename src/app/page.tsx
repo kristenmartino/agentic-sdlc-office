@@ -125,10 +125,10 @@ export default function Page() {
                   here rather than shown half-empty. */}
               <ObservedBeatTimeline beats={observedBeats} />
               <p className="text-[10px] text-office-muted/70 leading-snug px-1">
-                Observed mode shows one real session as an activity timeline — one
-                agent, no specialist hand-offs. The 8-room office is the{" "}
-                <span className="text-office-muted">scripted</span> operating model;
-                switch to REQ-014 or BUG-032 to see it.
+                Observed mode renders one real session as an activity timeline, not a
+                multi-agent relay. The 8-room office is the{" "}
+                <span className="text-office-muted">scripted</span> operating model —
+                switch to a scripted scenario to see it.
               </p>
             </>
           ) : (
