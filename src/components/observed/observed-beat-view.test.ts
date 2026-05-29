@@ -85,15 +85,23 @@ describe("buildTimelineView — zone lanes", () => {
 });
 
 describe("buildTimelineView — selection / drill-down", () => {
-  it("a selected beat exposes its literal eventIds and counts", () => {
+  it("a selected beat exposes display-safe eventRefs and counts (never raw ids)", () => {
     const beats = [
-      beat({ id: "beat_0000", eventCount: 10, signalCount: 5, eventIds: ["e0", "e1", "e2"] }),
+      beat({
+        id: "beat_0000",
+        eventCount: 5,
+        signalCount: 3,
+        // 5 raw ids — note eventCount === eventIds.length (reducer invariant).
+        eventIds: ["e0", "e1", "e2", "e3", "e4"],
+      }),
     ];
     const view = buildTimelineView(beats, "beat_0000");
     expect(view.selected).not.toBeNull();
-    expect(view.selected!.eventIds).toEqual(["e0", "e1", "e2"]);
-    expect(view.selected!.eventCount).toBe(10);
-    expect(view.selected!.signalCount).toBe(5);
+    expect(view.selected!.eventRefs).toEqual(["event 1", "event 2", "event 3", "event 4", "event 5"]);
+    expect(view.selected!.eventCount).toBe(5);
+    expect(view.selected!.signalCount).toBe(3);
+    // The render model carries NO raw event ids field at all.
+    expect("eventIds" in view.selected!).toBe(false);
   });
 
   it("an unknown selectedId yields no selection", () => {
@@ -125,8 +133,29 @@ describe("buildTimelineView — privacy by construction (end-to-end through the 
     expect(serialized).not.toContain("deploy.sh");
     expect(serialized).not.toContain("token=abc123");
 
-    // It DOES still carry the literal event id for drill-down (the id, not content).
-    expect(view.selected!.eventIds.length).toBeGreaterThan(0);
+    // It DOES still expose drill-down refs (counts) — but as safe refs, not ids.
+    expect(view.selected!.eventRefs.length).toBeGreaterThan(0);
+  });
+
+  it("never renders raw event ids — which embed the session id (P0 fix)", () => {
+    // Mapper ids are `evt_<sessionId>_NNNN`, so a raw id carries the session.
+    const sessionId = "real-session-abc123-uuid";
+    const beats: VisualBeat[] = [
+      beat({
+        id: "beat_0000",
+        eventCount: 2,
+        signalCount: 1,
+        eventIds: [`evt_${sessionId}_0001`, `evt_${sessionId}_0002`],
+      }),
+    ];
+    const view = buildTimelineView(beats, "beat_0000");
+    const serialized = JSON.stringify(view);
+
+    // The session id must appear NOWHERE in the render model.
+    expect(serialized).not.toContain(sessionId);
+    expect(serialized).not.toContain("evt_");
+    // Drill-down still works — via safe refs.
+    expect(view.selected!.eventRefs).toEqual(["event 1", "event 2"]);
   });
 
   it("labels in the view are the content-free reducer labels", () => {

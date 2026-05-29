@@ -64,12 +64,12 @@ export default function Page() {
           </p>
           {scenario.origin && (
             <p className="text-[10px] text-office-muted truncate font-mono">
-              {scenario.origin.source} · {scenario.origin.sessionId} · captured{" "}
+              {scenario.origin.source} · session loaded · captured{" "}
               {new Date(scenario.origin.capturedAt).toLocaleString()}
             </p>
           )}
           <p className="text-[10px] text-office-muted/80">
-            Sample fixture · real Claude Code transcript parser deferred to v0.2.
+            Sample fixture · parser/mapper preview · file loading not yet built.
           </p>
         </div>
       )}

@@ -139,12 +139,12 @@ export default function ObservedBeatTimeline({
           </div>
           <div className="mt-1.5">
             <p className="text-office-muted/70 uppercase tracking-wide text-[8px] mb-0.5">
-              event ids (drill-down — ids only, no content)
+              drill-down — {view.selected.eventCount} event{view.selected.eventCount === 1 ? "" : "s"} (refs only, no ids or content)
             </p>
             <div className="flex flex-wrap gap-1">
-              {view.selected.eventIds.map((id) => (
-                <span key={id} className="font-mono px-1 py-0.5 rounded bg-office-line/60 text-office-muted">
-                  {id}
+              {view.selected.eventRefs.map((ref) => (
+                <span key={ref} className="font-mono px-1 py-0.5 rounded bg-office-line/60 text-office-muted">
+                  {ref}
                 </span>
               ))}
             </div>
