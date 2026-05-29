@@ -117,10 +117,27 @@ export default function Page() {
 
       <div className="grid grid-cols-[1fr_320px] gap-4">
         <div className="flex flex-col gap-4">
-          {isObserved && <ObservedBeatTimeline beats={observedBeats} />}
-          <PhaseTimeline />
-          <Office />
-          <HandoffIndicator />
+          {isObserved ? (
+            <>
+              {/* Observed mode: the beat timeline IS the stage. The 8-room
+                  relay office is the scripted operating model and would render
+                  mostly-dead for a real single-agent session, so it's hidden
+                  here rather than shown half-empty. */}
+              <ObservedBeatTimeline beats={observedBeats} />
+              <p className="text-[10px] text-office-muted/70 leading-snug px-1">
+                Observed mode renders one real session as an activity timeline, not a
+                multi-agent relay. The 8-room office is the{" "}
+                <span className="text-office-muted">scripted</span> operating model —
+                switch to a scripted scenario to see it.
+              </p>
+            </>
+          ) : (
+            <>
+              <PhaseTimeline />
+              <Office />
+              <HandoffIndicator />
+            </>
+          )}
 
           <button
             onClick={openWi}
