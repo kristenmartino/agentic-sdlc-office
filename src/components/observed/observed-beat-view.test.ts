@@ -165,8 +165,23 @@ describe("buildTimelineView — stage (cute protagonist) + vocabulary", () => {
   it("stage phrase is content-free (action-derived) — never payload text", () => {
     const events = [status("coding"), message("API_KEY=sk-leak ./run.sh")];
     const view = buildTimelineView(reduceObservedPlayback(events));
-    expect(view.stage!.phrase).toBe("at the workbench");
+    expect(view.stage!.phrase).toBe("is at the workbench");
     expect(JSON.stringify(view.stage)).not.toContain("sk-leak");
+  });
+
+  it("phrases form a grammatical sentence with 'the agent <phrase>'", () => {
+    // The stage renders "the agent <phrase>"; every phrase must read sanely
+    // there (no "the agent is checks passed"). Cheap guard: each phrase
+    // starts with a verb-ish token, not a bare noun like "checks".
+    for (const phrase of Object.values(ACTION_PHRASE)) {
+      const sentence = `the agent ${phrase}`;
+      expect(sentence).not.toMatch(/the agent is (checks|failing) /);
+      expect(phrase.length).toBeGreaterThan(0);
+    }
+    // Spot-check the ones that previously read wrong.
+    expect(`the agent ${ACTION_PHRASE.test_pass}`).toBe("the agent passed the checks");
+    expect(`the agent ${ACTION_PHRASE.human_consulted}`).toBe("the agent asked the human");
+    expect(`the agent ${ACTION_PHRASE.outbox}`).toBe("the agent sent it out");
   });
 });
 

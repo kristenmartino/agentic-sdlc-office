@@ -94,7 +94,7 @@ export default function ObservedBeatTimeline({
             {view.stage.glyph}
           </span>
           <span className="text-[11px] text-office-text">
-            the agent is <span className="font-medium">{view.stage.phrase}</span>
+            <span className="font-medium">the agent {view.stage.phrase}</span>
             <span className="text-office-muted"> · in {view.stage.zoneLabel}</span>
           </span>
         </div>

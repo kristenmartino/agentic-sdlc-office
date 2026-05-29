@@ -62,18 +62,22 @@ export const ACTION_GLYPH: Record<VisualBeat["action"], string> = {
   note: "📋",
 };
 
+// Full verb phrases so the stage reads "the agent <phrase>" grammatically —
+// "the agent passed the checks", not "the agent is checks passed". "asked the
+// human" (not "asked you") since the human in a replayed transcript isn't
+// necessarily the current viewer.
 export const ACTION_PHRASE: Record<VisualBeat["action"], string> = {
-  read: "reading a file",
-  edit: "at the workbench",
-  test_run: "running checks",
-  test_pass: "checks passed",
-  test_fail: "checks failed",
-  think: "thinking",
-  human_consulted: "asked you a question",
+  read: "is reading a file",
+  edit: "is at the workbench",
+  test_run: "is running checks",
+  test_pass: "passed the checks",
+  test_fail: "hit failing checks",
+  think: "is thinking",
+  human_consulted: "asked the human",
   outbox: "sent it out",
-  compact: "tidying up",
-  blocked: "stuck",
-  note: "working",
+  compact: "is tidying up",
+  blocked: "is stuck",
+  note: "is working",
 };
 
 /**
