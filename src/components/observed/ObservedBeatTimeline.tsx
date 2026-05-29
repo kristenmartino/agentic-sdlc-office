@@ -37,6 +37,13 @@ const SEVERITY_DOT: Record<BeatSeverity, string> = {
   error: "bg-red-400",
 };
 
+const STAGE_TINT: Record<BeatSeverity, string> = {
+  info: "border-iris/30 bg-iris/5",
+  success: "border-emerald-500/40 bg-emerald-500/10",
+  warning: "border-amber-500/40 bg-amber-500/10",
+  error: "border-red-500/40 bg-red-500/10",
+};
+
 export default function ObservedBeatTimeline({
   beats,
   defaultSelectedBeatId = null,
@@ -73,6 +80,26 @@ export default function ObservedBeatTimeline({
         </span>
       </header>
 
+      {/* The protagonist — one little agent, doing the current beat's action.
+          Honest: a real session is one unnamed agent, so no specialist cast. */}
+      {view.stage && (
+        <div className={`flex items-center gap-2.5 rounded-md border px-2.5 py-1.5 ${STAGE_TINT[view.stage.severity]}`}>
+          <span
+            className="text-base leading-none animate-pulse-soft motion-reduce:animate-none select-none"
+            aria-hidden
+          >
+            🤖
+          </span>
+          <span className="text-base leading-none select-none" aria-hidden>
+            {view.stage.glyph}
+          </span>
+          <span className="text-[11px] text-office-text">
+            <span className="font-medium">the agent {view.stage.phrase}</span>
+            <span className="text-office-muted"> · in {view.stage.zoneLabel}</span>
+          </span>
+        </div>
+      )}
+
       {/* The flow — beats left→right in time order. */}
       <div className="flex items-center gap-1 overflow-x-auto pb-1" role="list" aria-label="Beat sequence">
         {view.sequence.map((b, i) => (
@@ -99,12 +126,23 @@ export default function ObservedBeatTimeline({
         ))}
       </div>
 
-      {/* Where time went — one row per populated zone. */}
+      {/* Where time went — one row per populated zone. The protagonist (🤖)
+          stands in whichever lane it's currently in; the lane is highlighted. */}
       <div className="flex flex-col gap-1" aria-label="Zone lanes">
         {view.lanes.map((lane) => (
-          <div key={lane.zone} className="flex items-center gap-2">
-            <span className="w-16 shrink-0 text-[9px] uppercase tracking-wide text-office-muted text-right">
+          <div
+            key={lane.zone}
+            className={`flex items-center gap-2 rounded px-1 py-0.5 transition ${
+              lane.active ? "bg-iris/10 ring-1 ring-iris/30" : ""
+            }`}
+          >
+            <span className={`w-16 shrink-0 text-[9px] uppercase tracking-wide text-right ${
+              lane.active ? "text-iris" : "text-office-muted"
+            }`}>
               {lane.label}
+            </span>
+            <span className="w-4 shrink-0 text-center text-xs leading-none select-none" aria-hidden>
+              {lane.active ? "🤖" : ""}
             </span>
             <div className="flex flex-wrap gap-1">
               {lane.beats.map((b) => (

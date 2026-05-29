@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildTimelineView, ZONE_ORDER } from "./observed-beat-view";
+import { ACTION_GLYPH, ACTION_PHRASE, buildTimelineView, ZONE_ORDER } from "./observed-beat-view";
 import { reduceObservedPlayback, type VisualBeat } from "@/lib/observed-playback-reducer";
 import type { WorkflowEvent } from "@/types/workflow-events";
 import type { AgentStatus } from "@/types/agents";
@@ -36,11 +36,12 @@ const beat = (over: Partial<VisualBeat>): VisualBeat => ({
 });
 
 describe("buildTimelineView — summary + sequence", () => {
-  it("empty beats → empty view", () => {
+  it("empty beats → empty view (incl. null stage)", () => {
     const view = buildTimelineView([]);
     expect(view.summary).toEqual({ beatCount: 0, eventCount: 0 });
     expect(view.sequence).toEqual([]);
     expect(view.lanes).toEqual([]);
+    expect(view.stage).toBeNull();
     expect(view.selected).toBeNull();
   });
 
@@ -111,6 +112,76 @@ describe("buildTimelineView — selection / drill-down", () => {
 
   it("no selection → selected is null", () => {
     expect(buildTimelineView([beat({})]).selected).toBeNull();
+  });
+});
+
+describe("buildTimelineView — stage (cute protagonist) + vocabulary", () => {
+  it("stage reflects the LATEST beat when nothing is selected", () => {
+    const view = buildTimelineView([
+      beat({ id: "b1", zone: "reading", action: "read" }),
+      beat({ id: "b2", zone: "testing", action: "test_pass", severity: "success" }),
+    ]);
+    expect(view.stage).not.toBeNull();
+    expect(view.stage!.zone).toBe("testing");
+    expect(view.stage!.action).toBe("test_pass");
+    expect(view.stage!.glyph).toBe(ACTION_GLYPH.test_pass);
+    expect(view.stage!.phrase).toBe(ACTION_PHRASE.test_pass);
+    expect(view.stage!.severity).toBe("success");
+  });
+
+  it("stage reflects the SELECTED beat when one is selected", () => {
+    const view = buildTimelineView(
+      [
+        beat({ id: "b1", zone: "reading", action: "read" }),
+        beat({ id: "b2", zone: "testing", action: "test_run" }),
+      ],
+      "b1",
+    );
+    expect(view.stage!.zone).toBe("reading");
+    expect(view.stage!.phrase).toBe(ACTION_PHRASE.read);
+  });
+
+  it("exactly one lane is active, matching the stage zone", () => {
+    const view = buildTimelineView([
+      beat({ id: "b1", zone: "reading", action: "read" }),
+      beat({ id: "b2", zone: "coding", action: "edit" }),
+    ]);
+    const active = view.lanes.filter((l) => l.active);
+    expect(active).toHaveLength(1);
+    expect(active[0].zone).toBe(view.stage!.zone);
+    expect(active[0].zone).toBe("coding"); // the latest beat's zone
+  });
+
+  it("vocabulary is complete: glyph and phrase maps share keys and are non-empty", () => {
+    const glyphKeys = Object.keys(ACTION_GLYPH).sort();
+    const phraseKeys = Object.keys(ACTION_PHRASE).sort();
+    expect(glyphKeys).toEqual(phraseKeys);
+    for (const k of glyphKeys) {
+      expect(ACTION_GLYPH[k as keyof typeof ACTION_GLYPH].length).toBeGreaterThan(0);
+      expect(ACTION_PHRASE[k as keyof typeof ACTION_PHRASE].length).toBeGreaterThan(0);
+    }
+  });
+
+  it("stage phrase is content-free (action-derived) — never payload text", () => {
+    const events = [status("coding"), message("API_KEY=sk-leak ./run.sh")];
+    const view = buildTimelineView(reduceObservedPlayback(events));
+    expect(view.stage!.phrase).toBe("is at the workbench");
+    expect(JSON.stringify(view.stage)).not.toContain("sk-leak");
+  });
+
+  it("phrases form a grammatical sentence with 'the agent <phrase>'", () => {
+    // The stage renders "the agent <phrase>"; every phrase must read sanely
+    // there (no "the agent is checks passed"). Cheap guard: each phrase
+    // starts with a verb-ish token, not a bare noun like "checks".
+    for (const phrase of Object.values(ACTION_PHRASE)) {
+      const sentence = `the agent ${phrase}`;
+      expect(sentence).not.toMatch(/the agent is (checks|failing) /);
+      expect(phrase.length).toBeGreaterThan(0);
+    }
+    // Spot-check the ones that previously read wrong.
+    expect(`the agent ${ACTION_PHRASE.test_pass}`).toBe("the agent passed the checks");
+    expect(`the agent ${ACTION_PHRASE.human_consulted}`).toBe("the agent asked the human");
+    expect(`the agent ${ACTION_PHRASE.outbox}`).toBe("the agent sent it out");
   });
 });
 

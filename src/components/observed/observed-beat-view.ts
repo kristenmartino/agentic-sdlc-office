@@ -43,6 +43,44 @@ export const ZONE_LABEL: Record<ObservedZone, string> = {
 };
 
 /**
+ * The "cute action vocabulary" — a content-free glyph + phrase per beat action.
+ * Keyed by action (finer than zone) so the protagonist's behavior reads
+ * specifically. Generated from the action alone; no payload text, so this is
+ * privacy-safe by construction.
+ */
+export const ACTION_GLYPH: Record<VisualBeat["action"], string> = {
+  read: "📖",
+  edit: "🔧",
+  test_run: "🧪",
+  test_pass: "✅",
+  test_fail: "❌",
+  think: "💭",
+  human_consulted: "🙋",
+  outbox: "📤",
+  compact: "🧹",
+  blocked: "🚧",
+  note: "📋",
+};
+
+// Full verb phrases so the stage reads "the agent <phrase>" grammatically —
+// "the agent passed the checks", not "the agent is checks passed". "asked the
+// human" (not "asked you") since the human in a replayed transcript isn't
+// necessarily the current viewer.
+export const ACTION_PHRASE: Record<VisualBeat["action"], string> = {
+  read: "is reading a file",
+  edit: "is at the workbench",
+  test_run: "is running checks",
+  test_pass: "passed the checks",
+  test_fail: "hit failing checks",
+  think: "is thinking",
+  human_consulted: "asked the human",
+  outbox: "sent it out",
+  compact: "is tidying up",
+  blocked: "is stuck",
+  note: "is working",
+};
+
+/**
  * A display-safe projection of a `VisualBeat` for the strip/lanes. Carries
  * everything the renderer needs — and deliberately **no `eventIds`**, so no
  * session-id-bearing id can reach the DOM. `id` is the safe `beat_NNNN`.
@@ -60,6 +98,22 @@ export interface ZoneLane {
   zone: ObservedZone;
   label: string;
   beats: BeatChip[];
+  /** True when the protagonist is currently in this zone (the stage zone). */
+  active: boolean;
+}
+
+/**
+ * Where the protagonist is and what it's doing right now — drives the cute
+ * avatar + action label. Derived from the "current" beat (the selected beat,
+ * else the latest one). Content-free.
+ */
+export interface StageState {
+  zone: ObservedZone;
+  zoneLabel: string;
+  action: VisualBeat["action"];
+  severity: VisualBeat["severity"];
+  glyph: string;
+  phrase: string;
 }
 
 export interface BeatDetail {
@@ -88,8 +142,21 @@ export interface TimelineView {
   sequence: BeatChip[];
   /** Populated zones only, in canonical order — the "where time went". */
   lanes: ZoneLane[];
+  /** Where the protagonist is + what it's doing now (selected beat ?? latest). */
+  stage: StageState | null;
   /** The drill-down detail for the selected beat, or null. */
   selected: BeatDetail | null;
+}
+
+function toStage(beat: VisualBeat): StageState {
+  return {
+    zone: beat.zone,
+    zoneLabel: ZONE_LABEL[beat.zone],
+    action: beat.action,
+    severity: beat.severity,
+    glyph: ACTION_GLYPH[beat.action],
+    phrase: ACTION_PHRASE[beat.action],
+  };
 }
 
 function toChip(beat: VisualBeat): BeatChip {
@@ -139,18 +206,23 @@ export function buildTimelineView(
     else byZone.set(beat.zone, [chip]);
   }
 
+  const selectedBeat = selectedId ? beats.find((b) => b.id === selectedId) : undefined;
+  // The protagonist's "current" beat: the selected one if any, else the latest.
+  const current = selectedBeat ?? (beats.length ? beats[beats.length - 1] : undefined);
+  const stage = current ? toStage(current) : null;
+
   const lanes: ZoneLane[] = ZONE_ORDER.filter((z) => byZone.has(z)).map((zone) => ({
     zone,
     label: ZONE_LABEL[zone],
     beats: byZone.get(zone)!,
+    active: stage ? stage.zone === zone : false,
   }));
-
-  const selectedBeat = selectedId ? beats.find((b) => b.id === selectedId) : undefined;
 
   return {
     summary: { beatCount: beats.length, eventCount },
     sequence: beats.map(toChip),
     lanes,
+    stage,
     selected: selectedBeat ? beatDetail(selectedBeat) : null,
   };
 }
