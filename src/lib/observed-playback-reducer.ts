@@ -5,8 +5,8 @@ import type { WorkflowEvent } from "@/types/workflow-events";
  * ObservedPlaybackReducer — Spike 0 for observed mode.
  *
  * Collapses a dense, literal `WorkflowEvent[]` stream into a much smaller
- * sequence of `VisualBeat`s the renderer can animate without strobing. This
- * is the make-or-break structural question from
+ * sequence of `VisualBeat`s the renderer can animate without strobing. The
+ * make-or-break structural question from
  * [`docs/design/observed-office.md`](../../docs/design/observed-office.md):
  * *does a real dense session collapse into sane, truthful beats?*
  *
@@ -15,24 +15,22 @@ import type { WorkflowEvent } from "@/types/workflow-events";
  * - **Pure.** `WorkflowEvent[]` in, `VisualBeat[]` out. No React, no store,
  *   no IO, no `Date.now`/`Math.random`. Same ethos as `applyEvent`,
  *   `validateScenario`, `timelinePosition`.
- * - **Preserve truth.** Every beat carries `eventIds` (and `eventCount ===
- *   eventIds.length`). Smoothing is a *view* grouping over the real events,
- *   never a replacement — the activity log and drill-down stay literal.
- * - **Privacy by construction.** Labels are generated from *action + count
- *   only*, never from event payload text. The reducer cannot leak a raw
- *   prompt, command, stderr, or thinking string into a beat label because it
- *   never reads `payload.message` for display. (Input is already redacted by
- *   the mapper; the reducer adds no new exposure surface.)
+ * - **Preserve truth.** Every non-lifecycle (activity) event id lands in
+ *   exactly one beat — including detail events that arrive *before* the first
+ *   activity beat (they buffer and fold into it; a message-only session gets
+ *   one generic `note` beat). `eventCount === eventIds.length`. Smoothing is a
+ *   *view* grouping over the real events, never a replacement.
+ * - **Privacy by construction.** Labels are generated from *action + a count
+ *   of action signals only*, never from event payload text. The reducer cannot
+ *   leak a raw prompt, command, stderr, or thinking string into a label. The
+ *   one place it reads `payload.message` is to match a single known-safe
+ *   *constant* (the runtime's compaction marker) for classification — never
+ *   for display.
  *
- * Coalescing rule: consecutive events with the **same action** fold into one
- * beat (10 edits → one "editing intensely (10 edits)" beat). `agent.message.sent`
- * and non-PR `artifact.produced` *attach* to the current beat (bump count,
- * extend end) rather than spawning their own — they're detail within an
- * activity, not a zone hop. Lifecycle events (`run.*`, `work_item.*`) are not
- * beats; they bracket the timeline and remain in the raw log.
- *
- * Minimum-dwell *timing* (how long a beat must stay on screen) is a renderer
- * concern layered on top — the reducer handles the structural collapse.
+ * Coalescing: consecutive events with the **same action** fold into one beat.
+ * `agent.message.sent` and non-PR `artifact.produced` *attach* (detail) — they
+ * bump `eventCount` but not `signalCount`, so a coding beat with 5 edits + 5
+ * chatter messages labels honestly as "editing intensely (5 edits)", not 10.
  */
 
 export type ObservedZone =
@@ -41,7 +39,8 @@ export type ObservedZone =
   | "testing"
   | "thinking"
   | "human"
-  | "outbox";
+  | "outbox"
+  | "activity"; // meta zone for system/orphan beats (compaction, note fallback)
 
 export type BeatAction =
   | "read"
@@ -53,7 +52,8 @@ export type BeatAction =
   | "human_consulted"
   | "outbox"
   | "compact"
-  | "blocked";
+  | "blocked"
+  | "note"; // generic fallback so no activity event is ever lost
 
 export type BeatSeverity = "info" | "success" | "warning" | "error";
 
@@ -63,19 +63,31 @@ export interface VisualBeat {
   zone: ObservedZone;
   action: BeatAction;
   severity: BeatSeverity;
-  /** ISO timestamp of the first folded event. */
+  /** ISO timestamp of the earliest folded event. */
   startTs: string;
-  /** ISO timestamp of the last folded event. */
+  /** ISO timestamp of the latest folded event. */
   endTs: string;
-  /** How many raw events collapsed into this beat. Always === eventIds.length. */
+  /**
+   * Total raw events folded in (action signals + attached detail). Always
+   * === eventIds.length. This is the drill-down count.
+   */
   eventCount: number;
+  /**
+   * Count of *action signals* of this beat's action (e.g. actual edits) —
+   * excludes attached messages/artifacts. This is what the label uses, so the
+   * label can't overstate "N edits".
+   */
+  signalCount: number;
   /** Drill-down handle — every raw event id that folded in. Preserves truth. */
   eventIds: string[];
-  /** Content-free, generated from action + count only (privacy by construction). */
+  /** Content-free, generated from action + signalCount only. */
   label: string;
 }
 
-/** A classification of one event: a beat signal, an attach, or skip. */
+/** The runtime's compaction marker (a known-safe constant — not arbitrary text). */
+const COMPACT_MARKER = "Conversation compacted by the runtime";
+
+/** A classification of one event: a beat signal, an attach (detail), or skip. */
 type Signal =
   | { kind: "beat"; zone: ObservedZone | "__current__"; action: BeatAction; severity: BeatSeverity }
   | { kind: "attach" }
@@ -97,6 +109,19 @@ const STATUS_SIGNAL: Partial<Record<AgentStatus, Signal>> = {
   // blocked / done / idle stay dormant for observed mode (per the doc) — skip.
 };
 
+/**
+ * Distinguish a real PR-link artifact from an edit artifact. Both use
+ * `kind: "code_pr"` (the mapper has no separate code-change kind), so kind
+ * alone is NOT enough — an edit artifact would otherwise render as "opened a
+ * PR". A real PR is identified by a `/pull/<n>` ref or a `PR #<n>` summary.
+ */
+function isPrArtifact(artifact: { kind?: string; ref?: string; summary?: string }): boolean {
+  if (artifact.kind !== "code_pr") return false;
+  const ref = artifact.ref ?? "";
+  const summary = artifact.summary ?? "";
+  return /\/pull\/\d+/.test(ref) || /^PR #\d+\b/.test(summary);
+}
+
 function classify(event: WorkflowEvent): Signal {
   switch (event.type) {
     case "agent.status.changed": {
@@ -110,10 +135,10 @@ function classify(event: WorkflowEvent): Signal {
       return { kind: "beat", zone: "testing", action: "test_fail", severity: "error" };
 
     case "artifact.produced": {
-      const kind = (event.payload as { artifact?: { kind?: string } }).artifact?.kind;
-      // A PR artifact is the terminal "sent it out" beat; other artifacts
-      // (code edits) are detail within the current coding activity.
-      if (kind === "code_pr") {
+      const artifact = (event.payload as { artifact?: { kind?: string; ref?: string; summary?: string } }).artifact ?? {};
+      // Only a genuine PR link is an outbox beat; edit artifacts (also
+      // kind:"code_pr") are detail within the current coding activity.
+      if (isPrArtifact(artifact)) {
         return { kind: "beat", zone: "outbox", action: "outbox", severity: "success" };
       }
       return { kind: "attach" };
@@ -122,8 +147,15 @@ function classify(event: WorkflowEvent): Signal {
     case "blocker.raised":
       return { kind: "beat", zone: "__current__", action: "blocked", severity: "error" };
 
-    case "agent.message.sent":
+    case "agent.message.sent": {
+      // The single known-safe constant the reducer matches for classification.
+      // (Long-term: a dedicated compaction event type would be cleaner than a
+      // string match — tracked in the design doc.)
+      if ((event.payload as { message?: string }).message === COMPACT_MARKER) {
+        return { kind: "beat", zone: "activity", action: "compact", severity: "info" };
+      }
       return { kind: "attach" };
+    }
 
     // Lifecycle — bracket the timeline, not beats. Remain in the raw log.
     case "run.started":
@@ -150,25 +182,22 @@ const DEFAULT_ZONE: ObservedZone = "coding";
  * Reduce a literal event stream to a watchable beat sequence.
  *
  * Pure. Deterministic ids (`beat_0000`, `beat_0001`, …). Returns `[]` for an
- * empty or activity-free stream.
+ * empty or activity-free (lifecycle-only) stream.
  */
 export function reduceObservedPlayback(events: WorkflowEvent[]): VisualBeat[] {
   const beats: VisualBeat[] = [];
   let current: VisualBeat | null = null;
   let currentZone: ObservedZone = DEFAULT_ZONE;
   let seq = 0;
+  // Detail events seen before any beat is open. They are NOT lost: they fold
+  // into the next beat that opens, or become a generic `note` beat at the end.
+  const pending: WorkflowEvent[] = [];
 
-  // Fold an event into the open beat (detail / coalesce): bump count + extend end.
-  const fold = (beat: VisualBeat, ev: WorkflowEvent) => {
-    beat.eventIds.push(ev.id);
-    beat.eventCount = beat.eventIds.length;
-    beat.endTs = ev.ts;
-  };
+  const nextId = () => `beat_${String(seq++).padStart(4, "0")}`;
 
-  // Finalize the open beat (generate its content-free label) and push it.
   const flush = () => {
     if (current) {
-      current.label = labelFor(current.action, current.eventCount);
+      current.label = labelFor(current.action, current.signalCount);
       beats.push(current);
       current = null;
     }
@@ -180,9 +209,15 @@ export function reduceObservedPlayback(events: WorkflowEvent[]): VisualBeat[] {
     if (sig.kind === "skip") continue;
 
     if (sig.kind === "attach") {
-      // Detail within the current activity. If nothing is open yet, the
-      // detail has no home — it stays in the raw log only.
-      if (current) fold(current, event);
+      if (current) {
+        // Detail within the current activity: bump total count, not signals.
+        current.eventIds.push(event.id);
+        current.eventCount = current.eventIds.length;
+        current.endTs = event.ts;
+      } else {
+        // No beat yet — buffer; will fold into the next beat (or a note beat).
+        pending.push(event);
+      }
       continue;
     }
 
@@ -190,36 +225,64 @@ export function reduceObservedPlayback(events: WorkflowEvent[]): VisualBeat[] {
     const zone = sig.zone === "__current__" ? currentZone : sig.zone;
 
     if (current && current.action === sig.action) {
-      // Same action — coalesce (this is the dense-stream collapse).
-      fold(current, event);
+      // Same action — coalesce. This IS a signal, so bump signalCount too.
+      current.eventIds.push(event.id);
+      current.eventCount = current.eventIds.length;
+      current.signalCount += 1;
+      current.endTs = event.ts;
       continue;
     }
 
     flush();
+
+    // Open a new beat. Any buffered leading detail folds in first (it happened
+    // before this activity, so it owns the earlier startTs).
+    const pendingIds = pending.map((e) => e.id);
+    const startTs = pending[0]?.ts ?? event.ts;
+    pending.length = 0;
     current = {
-      id: `beat_${String(seq++).padStart(4, "0")}`,
+      id: nextId(),
       zone,
       action: sig.action,
       severity: sig.severity,
-      startTs: event.ts,
+      startTs,
       endTs: event.ts,
-      eventCount: 1,
-      eventIds: [event.id],
-      label: "", // finalized on flush
+      eventIds: [...pendingIds, event.id],
+      eventCount: pendingIds.length + 1,
+      signalCount: 1, // the opening event is one action signal
+      label: "",
     };
     currentZone = zone;
   }
 
   flush();
+
+  // A session made entirely of detail (e.g. only assistant text, no tool
+  // activity) still must not lose its events: emit one generic note beat.
+  if (beats.length === 0 && pending.length > 0) {
+    beats.push({
+      id: nextId(),
+      zone: "activity",
+      action: "note",
+      severity: "info",
+      startTs: pending[0].ts,
+      endTs: pending[pending.length - 1].ts,
+      eventIds: pending.map((e) => e.id),
+      eventCount: pending.length,
+      signalCount: 0, // no action signals — pure detail
+      label: labelFor("note", 0),
+    });
+  }
+
   return beats;
 }
 
-function labelFor(action: BeatAction, count: number): string {
+function labelFor(action: BeatAction, signalCount: number): string {
   switch (action) {
     case "read":
-      return count > 1 ? `read ${count} files` : "reading";
+      return signalCount > 1 ? `read ${signalCount} files` : "reading";
     case "edit":
-      return count > 1 ? `editing intensely (${count} edits)` : "editing";
+      return signalCount > 1 ? `editing intensely (${signalCount} edits)` : "editing";
     case "test_run":
       return "running tests";
     case "test_pass":
@@ -236,5 +299,7 @@ function labelFor(action: BeatAction, count: number): string {
       return "compacted context";
     case "blocked":
       return "blocked";
+    case "note":
+      return "activity observed";
   }
 }

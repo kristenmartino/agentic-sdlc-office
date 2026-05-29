@@ -17,15 +17,23 @@ const ev = (type: WorkflowEvent["type"], payload: Record<string, unknown>): Work
 
 const status = (to: AgentStatus) => ev("agent.status.changed", { agentId: "mira", to });
 const message = (text: string) => ev("agent.message.sent", { agentId: "mira", message: text });
+// Edit/Write artifacts use kind:"code_pr" with a FILE ref — exactly what the
+// mapper emits. These must ATTACH (be detail), not become outbox beats.
 const editArtifact = () =>
-  ev("artifact.produced", { artifact: { id: "a1", kind: "code_pr_NOPE_use_other", ref: "x" } });
-const codeEdit = () => ev("artifact.produced", { artifact: { kind: "review_report" } }); // non-PR → attach
-const prArtifact = () => ev("artifact.produced", { artifact: { kind: "code_pr", ref: "https://…/pull/1" } });
+  ev("artifact.produced", { artifact: { kind: "code_pr", ref: "/Users/example/repo/src/Button.tsx", summary: "Edit: Button.tsx — 3 hunks" } });
+// A genuine PR-link artifact — distinguished by a /pull/<n> ref.
+const prArtifact = () =>
+  ev("artifact.produced", { artifact: { kind: "code_pr", ref: "https://github.com/example/repo/pull/1", summary: "PR #1 opened in example/repo" } });
+// A PR identified by summary alone (ref absent).
+const prArtifactBySummary = () =>
+  ev("artifact.produced", { artifact: { kind: "code_pr", summary: "PR #42 opened in example/repo" } });
 const gatePass = () => ev("quality_gate.passed", { gate: { id: "g1", status: "passed" } });
 const gateFail = () => ev("quality_gate.failed", { gate: { id: "g2", status: "failed" } });
 const blocker = () => ev("blocker.raised", { blocker: { id: "b1" } });
+const compactMarker = () => ev("agent.message.sent", { agentId: "mira", message: "Conversation compacted by the runtime" });
 const runStarted = () => ev("run.started", {});
 const runCompleted = () => ev("run.completed", {});
+const workItemCreated = () => ev("work_item.created", { title: "x" });
 
 const actions = (beats: VisualBeat[]) => beats.map((b) => b.action);
 const zones = (beats: VisualBeat[]) => beats.map((b) => b.zone);
@@ -99,7 +107,7 @@ describe("reduceObservedPlayback — coalescing (the dense-stream collapse)", ()
     expect(actions(beats)).toEqual(["edit", "test_run", "edit"]);
   });
 
-  it("agent.message.sent attaches to the current beat (no zone hop, count bumps)", () => {
+  it("agent.message.sent attaches to the current beat (bumps eventCount, NOT signalCount)", () => {
     const beats = reduceObservedPlayback([
       status("coding"),
       message("did a thing"),
@@ -107,24 +115,61 @@ describe("reduceObservedPlayback — coalescing (the dense-stream collapse)", ()
     ]);
     expect(beats).toHaveLength(1);
     expect(beats[0].action).toBe("edit");
-    expect(beats[0].eventCount).toBe(3); // status + 2 messages
+    expect(beats[0].eventCount).toBe(3); // status + 2 messages (drill-down truth)
+    expect(beats[0].signalCount).toBe(1); // only ONE real edit signal
+    expect(beats[0].label).toBe("editing"); // not "editing intensely (3 edits)"
   });
 
-  it("a leading message with no open beat is dropped from beats (stays in raw log)", () => {
+  it("a leading message is NOT lost — it folds into the next beat (preserve truth)", () => {
     const beats = reduceObservedPlayback([message("orphan"), status("coding")]);
     expect(beats).toHaveLength(1);
-    expect(beats[0].eventCount).toBe(1); // only the coding status; the orphan message is not folded
+    expect(beats[0].eventCount).toBe(2); // the orphan message + the coding status
+    expect(beats[0].signalCount).toBe(1); // one edit signal
+    // The leading message owns the earlier startTs.
+    expect(beats[0].startTs <= beats[0].endTs).toBe(true);
   });
 
-  it("non-PR artifacts attach to the current coding beat; a PR artifact is its own outbox beat", () => {
-    const beats = reduceObservedPlayback([
-      status("coding"),
-      codeEdit(), // review_report artifact → attach
-      prArtifact(), // code_pr → outbox beat
-    ]);
+  it("a message-only session yields one generic 'activity observed' note beat (nothing lost)", () => {
+    const beats = reduceObservedPlayback([message("hello"), message("world")]);
+    expect(beats).toHaveLength(1);
+    expect(beats[0].zone).toBe("activity");
+    expect(beats[0].action).toBe("note");
+    expect(beats[0].label).toBe("activity observed");
+    expect(beats[0].eventCount).toBe(2);
+  });
+});
+
+describe("reduceObservedPlayback — PR vs edit artifact (the P0 bug)", () => {
+  it("an EDIT artifact (kind code_pr, file ref) ATTACHES — it is NOT an outbox beat", () => {
+    const beats = reduceObservedPlayback([status("coding"), editArtifact()]);
+    expect(beats).toHaveLength(1);
+    expect(beats[0].action).toBe("edit"); // stayed coding, did NOT become outbox
+    expect(beats[0].eventCount).toBe(2); // status + attached edit artifact
+  });
+
+  it("a PR artifact identified by a /pull/<n> ref IS an outbox beat", () => {
+    const beats = reduceObservedPlayback([status("coding"), prArtifact()]);
     expect(actions(beats)).toEqual(["edit", "outbox"]);
-    expect(beats[0].eventCount).toBe(2); // coding status + attached artifact
     expect(beats[1].label).toBe("opened a PR");
+  });
+
+  it("a PR artifact identified by a 'PR #<n>' summary (no ref) IS an outbox beat", () => {
+    const beats = reduceObservedPlayback([status("coding"), prArtifactBySummary()]);
+    expect(actions(beats)).toEqual(["edit", "outbox"]);
+  });
+});
+
+describe("reduceObservedPlayback — compaction", () => {
+  it("the runtime compaction marker becomes a compact beat", () => {
+    const beats = reduceObservedPlayback([status("coding"), compactMarker(), status("coding")]);
+    expect(actions(beats)).toEqual(["edit", "compact", "edit"]);
+    expect(beats[1].zone).toBe("activity");
+    expect(beats[1].label).toBe("compacted context");
+  });
+
+  it("an ordinary message is NOT mistaken for compaction", () => {
+    const beats = reduceObservedPlayback([status("coding"), message("compacted? no, just chatting")]);
+    expect(actions(beats)).toEqual(["edit"]); // attached, not a compact beat
   });
 });
 
@@ -161,11 +206,13 @@ describe("reduceObservedPlayback — preserve-truth invariant", () => {
   it("every activity event id lands in exactly one beat; eventCount === eventIds.length", () => {
     const events = [
       runStarted(),
+      workItemCreated(), // lifecycle — must also be excluded, not beaten
+      message("leading narration"), // a LEADING detail event — must not be lost
       status("reading"),
       status("reading"),
       message("note"),
       status("coding"),
-      codeEdit(),
+      editArtifact(),
       status("testing"),
       gatePass(),
       prArtifact(),
@@ -183,8 +230,13 @@ describe("reduceObservedPlayback — preserve-truth invariant", () => {
     expect(new Set(allIds).size).toBe(allIds.length);
 
     // Every NON-lifecycle event id is captured by some beat (nothing lost from
-    // drill-down). Lifecycle events (run.*) are intentionally not in beats.
-    const lifecycle = new Set(["run.started", "run.completed"]);
+    // drill-down) — INCLUDING the leading narration message. Lifecycle events
+    // (run.* / work_item.*) are intentionally not in beats.
+    const lifecycle = new Set([
+      "run.started", "run.paused", "run.completed",
+      "work_item.created", "work_item.refined", "work_item.owner.changed",
+      "work_item.mode.changed", "work_item.completed",
+    ]);
     const activityIds = events.filter((e) => !lifecycle.has(e.type)).map((e) => e.id);
     for (const id of activityIds) {
       expect(allIds).toContain(id);
@@ -205,9 +257,11 @@ describe("reduceObservedPlayback — privacy by construction", () => {
     expect(beats[0].label).not.toContain("sk-supersecret");
     expect(beats[0].label).not.toContain("API_KEY");
     expect(beats[0].label).not.toContain("deploy");
-    // The label is generated from action + count only — the attached message
-    // bumps the count (to 2) but contributes zero content.
-    expect(beats[0].label).toBe("editing intensely (2 edits)");
+    // Label is from action + signalCount only. One edit signal + one attached
+    // message → signalCount 1 → "editing" (and zero content from the message).
+    expect(beats[0].signalCount).toBe(1);
+    expect(beats[0].eventCount).toBe(2);
+    expect(beats[0].label).toBe("editing");
   });
 });
 
@@ -251,13 +305,14 @@ describe("reduceObservedPlayback — dense session collapses (the make-or-break)
     expect(actions(beats)).toContain("test_fail");
   });
 
-  it("each coding beat aggregates its 5 edits + 5 chatter messages into one beat of count 10", () => {
+  it("each coding beat folds 5 edits + 5 chatter messages: eventCount 10, signalCount 5, honest label", () => {
     const beats = reduceObservedPlayback(denseSession());
     const codingBeats = beats.filter((b) => b.action === "edit");
     expect(codingBeats).toHaveLength(4); // one per round
     for (const b of codingBeats) {
-      expect(b.eventCount).toBe(10); // 5 status("coding") + 5 attached messages
-      expect(b.label).toBe("editing intensely (10 edits)");
+      expect(b.eventCount).toBe(10); // drill-down truth: 5 status + 5 messages
+      expect(b.signalCount).toBe(5); // only 5 are real edits
+      expect(b.label).toBe("editing intensely (5 edits)"); // not 10
     }
   });
 });
