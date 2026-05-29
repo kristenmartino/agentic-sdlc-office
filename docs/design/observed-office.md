@@ -61,21 +61,35 @@ observed mode only**, by **activity zones** that one character moves between.
 
 ### Zones
 
-Crucially, the zones map onto `AgentStatus` values the mapper **already emits** —
-so this is mostly a *rendering reframe*, not a new data pipeline.
+**Some zones map to status transitions the mapper emits today; others require a
+small mapper addition.** This distinction matters — it's the difference between
+"a rendering reframe" and "new mapper work." Don't conflate "the value exists in
+the `AgentStatus` union" with "the mapper emits this transition."
 
-| Zone | Lights up on (real event already emitted) | Existing status |
+**Already emitted today** (verified in `claude-code-transcript-mapper.ts` —
+`setStatus` only ever emits these four):
+
+| Zone | Lights up on | Status emitted today |
 | --- | --- | --- |
-| Reading Nook | `Read` / `Glob` / `Grep` tool_use | `reading` |
-| Workbench | `Edit` / `Write` / `MultiEdit` + `artifact.produced` | `coding` |
-| Test Lab | `Bash` test/build cmd + `quality_gate.passed/failed` | `testing` |
-| Thinking Corner | `thinking` block (shape only — **never content**) | `thinking` |
-| Human Desk | `AskUserQuestion` (read-only touchpoint) | `waiting_on_human` |
-| Outbox | `pr-link` → `artifact.produced (code_pr)` | (terminal) |
+| Reading Nook | `Read` / `Glob` / `Grep` tool_use | `reading` ✅ |
+| Workbench | `Edit` / `Write` / `MultiEdit` + `artifact.produced` | `coding` ✅ |
+| Test Lab | `Bash` test/build cmd + `quality_gate.passed/failed` | `testing` ✅ |
+| (any zone) | tool failure | `failed` ✅ |
 
-`planning`, `designing`, `reviewing` zones exist in the status vocabulary and
-can be added if real sessions surface those patterns; today the mapper doesn't
-infer them, so they stay dormant rather than fabricated.
+**Requires a small mapper addition** (the signal exists in the transcript but the
+mapper currently drops it or emits it as a neutral message):
+
+| Zone | Real signal | Today | Needs |
+| --- | --- | --- | --- |
+| Thinking Corner | `thinking` block | **dropped** (`continue`) | emit a neutral status *pulse* — shape only, **never the text** |
+| Human Desk | `AskUserQuestion` | neutral `agent.message.sent` | route to `waiting_on_human` (or a `human_consulted` marker) |
+| Outbox | `pr-link` | `artifact.produced (code_pr)`, no status | a terminal Outbox/`done` visual state |
+| (transition) | `compact_boundary` | marker message | a "tidying memory" visual beat |
+
+`planning`, `designing`, `reviewing` zones exist in the status vocabulary but the
+mapper never infers them — they stay dormant rather than fabricated. The point:
+the zone *reframe* is cheap, but it is **not** free — budget the four small
+mapper additions above as part of the MVP, not as "already done."
 
 ### The cute action vocabulary
 
@@ -100,10 +114,16 @@ something watchable.
 
 - **One protagonist** for a normal session (mapped to the default office agent).
   No ensemble cast in observed mode — real sessions don't have one.
-- **Helpers appear only on real fan-out.** A `Task`/subagent spawn pops a helper
-  character into a side desk; it does its work and leaves (the honest star
-  topology). Each helper is itself drillable — clicking it descends into *its*
-  sub-session, which renders as its own Level-2 office (the fractal structure).
+- **MVP: a "helper requested" badge, not a helper character.** `Task` /
+  `TaskCreate` / `TaskUpdate` are **log-only today** — the mapper does not expand
+  subagents, and locating/associating the sidechain `agent-*.jsonl` files is
+  unbuilt. So for the MVP a fan-out shows a small "helper requested" badge on the
+  protagonist, nothing more.
+- **Helper characters + fractal drill-down are post-MVP (v0.3+).** The honest
+  star topology — a helper pops into a side desk, works, leaves, and is clickable
+  to descend into *its* own Level-2 office — is the right end state, but it
+  depends on subagent expansion, which the discovery doc already scopes as a
+  separate v0.3 task. Do **not** build drill-down into the MVP.
 
 ### Governance is the spine, and it's read-only
 
@@ -114,23 +134,53 @@ with no resolver) and never surfaces a resolvable Decision Inbox item. If a
 future feature wants to record these, it uses a new **non-blocking**
 `human.consulted`-style event, never the scripted decision path.
 
-## The watchability layer (the genuinely hard part)
+## The watchability layer — a first-class reducer, not a design note
 
 A real session is **fast and dense** — hundreds of interleaved tool calls. A
-naïve literal render teleports the character on every event (visual chaos).
-Three mechanisms make literal *watchable*:
+naïve literal render teleports the character on every event (visual chaos). This
+is **make-or-break** and it is **part of the MVP**, not a later nicety (see
+Sequencing — and note this is the one place this doc holds a position against the
+review, which deferred it to a later phase; without it the single-session office
+isn't watchable *at all*, so it can't be deferred).
 
-1. **Speed control.** Reuse the existing tick-based playback; let the user
-   scrub/slow/fast-forward. (Already present for scripted mode.)
-2. **Dwell / debounce.** The character stays in a zone until N contrary events,
-   so an `edit→test→edit→test` loop reads as "working at the bench, occasionally
-   checking tests" rather than a strobe.
-3. **Aggregation.** Bursts collapse: 10 rapid edits render as "editing
-   intensely" (one sustained action with a counter), not 10 separate hops.
+Make it a **named, pure, testable module** that sits between the event stream and
+the renderer — same ethos as `applyEvent` / `validateScenario` / `timelinePosition`.
+Left as a vague "design note," dwell/aggregation logic will get bolted into a
+React effect and become untestable.
 
-This layer is where the design risk lives: too little smoothing = chaos; too
-much = a lie about what actually happened. Tuning it against a real dense
-session is the first thing to prototype.
+```ts
+// ObservedPlaybackReducer
+//   Input:  WorkflowEvent[]      (the literal, ordered event stream)
+//   Output: VisualBeat[]         (what the renderer actually animates)
+//
+// Responsibilities:
+//   - coalesce repeated same-zone events into one sustained beat
+//   - enforce a minimum dwell time per zone (no strobing)
+//   - group edit→test→edit loops into a single composite "working" beat
+//   - PRESERVE truth: every beat carries its underlying event count + ids,
+//     so drill-down and the activity log stay literal (the smoothing is a
+//     view concern, never a data-loss concern)
+
+interface VisualBeat {
+  zone: ObservedZone;          // reading | coding | testing | thinking | human | outbox
+  startTs: string;
+  endTs: string;
+  eventCount: number;          // how many raw events collapsed into this beat
+  eventIds: string[];          // drill-down handle — preserves literal truth
+  label: string;               // e.g. "editing intensely (12 edits)"
+  intensity?: number;          // optional, for animation weight
+}
+```
+
+Plus **speed control** (reuse the existing tick-based playback — scrub / slow /
+fast-forward; already present for scripted mode).
+
+This module is where the design risk lives: too little smoothing = chaos; too
+much = a lie about what happened. The invariant that keeps it honest is
+*preserve-truth*: beats are a presentation grouping over the real events, never a
+replacement for them. **Prototyping this reducer against one real dense session —
+and judging whether the result is pleasant to watch — is the single first thing
+to build.**
 
 ---
 
@@ -152,12 +202,25 @@ This is exactly the loop this very project runs (build → external review →
 follow-up fix session), and the cross-model review loop (Claude builds → another
 model reviews → Claude revises → human merges) is its sharpest instance.
 
-**Prerequisite — the join key.** Stitching sessions into a path requires a
-stable key the mapper currently throws away: `workItem.branch` is left `null`
-and each session mints its own `wi_observed_<sessionId>`. Populate
-`workItem.branch` from the transcript's `gitBranch`, and index sessions by
-PR/branch ref. Cheap, no-regret, and it's the only thing standing between
-"a pile of sessions" and "a project path."
+**Prerequisite — the join key (and it's not as simple as "use the branch").**
+Stitching sessions into a path requires a stable key the mapper currently throws
+away (`workItem.branch` is `null`; each session mints its own
+`wi_observed_<sessionId>`). But branches get reused, renamed, deleted, and shared
+across unrelated sessions, and `gitBranch` is present on *many* but not *all*
+transcript lines — so "populate branch from `gitBranch`" alone over-claims
+continuity. Use a **precedence with explicit confidence**, and never draw a path
+edge above the confidence the data supports:
+
+| Join key (in precedence order) | Confidence |
+| --- | --- |
+| PR URL / PR number (from `pr-link`) | **high** |
+| repo + `gitBranch` + `cwd` | **medium** |
+| encoded project folder + `sessionId` (fallback) | **low** (no real cross-session claim) |
+
+This directly answers the orchestrator-chaining panel's "reconstruction
+fragility" warning: a *wrong* lifecycle graph is worse than honestly showing
+disconnected sessions. Render low-confidence links as dotted/uncertain, or not at
+all — never as a confident relay.
 
 Render: the floor shows the ordered sessions as rooms-along-a-corridor (or a
 ribbon), each drillable into its Level-2 office. Phase labels (Generate /
@@ -180,8 +243,29 @@ folders on disk today).
   a PR awaiting merge here, a blocked session there."* Governance at portfolio
   scale, which nothing else renders cutely.
 - **Metadata-only at this level.** You cannot hold 50 sessions × ~24 MB in
-  memory. The campus reads a lightweight index (title, last activity, PR status)
-  and lazy-loads a full transcript only on zoom-in.
+  memory. The campus reads a lightweight index and lazy-loads a full transcript
+  only on zoom-in. Draft index shape (define it *before* any campus UI work, so
+  it doesn't sprawl — but this is Level 4, not to be built until 1–3 prove out):
+
+  ```ts
+  interface ObservedSessionIndexEntry {
+    sessionId: string;
+    projectKey: string;          // the join key (see Level 3 precedence)
+    cwdHash: string;             // hashed, never the raw path
+    repo?: string;
+    branch?: string;
+    prUrl?: string;
+    title: string;               // custom-title > user prompt > ai-title
+    startedAt: string;
+    endedAt?: string;
+    eventCount: number;
+    lastStatus: AgentStatus;
+    producedArtifactKinds: string[];
+    blockerCount: number;
+    humanTouchpointCount: number;  // AskUserQuestion count
+    transcriptPath?: string;       // local-only; opaque/redacted in UI
+  }
+  ```
 
 ## Honesty & privacy invariants (carried forward, already built)
 
@@ -207,19 +291,43 @@ These hold at every zoom level and are non-negotiable:
 - Redaction + governance touchpoint handling.
 
 **New:**
-- Zone reframe + the event→cute-action vocabulary (Level 1–2).
-- The watchability layer: speed / dwell / aggregation.
-- The branch/PR join key + a session index (Level 3).
+- Zone reframe + the event→cute-action vocabulary, **plus four small mapper
+  additions** (thinking pulse, human-desk status, outbox terminal, compaction
+  beat) — the zone reframe is cheap but not free (Level 1–2).
+- The `ObservedPlaybackReducer` (`WorkflowEvent[] → VisualBeat[]`) + speed control.
+- The branch/PR join key **with confidence precedence** + a session index (Level 3).
+- Subagent expansion → real helper characters + drill-down (v0.3; MVP is a badge).
 - The campus overview + lazy metadata index + cross-project Decision Inbox
   (Level 4).
 
 ## Sequencing (each step independently shippable)
 
-1. **Single-session literal cute office** — zones + action vocabulary +
-   watchability. The MVP; nothing above matters until this is worth watching.
-2. **Capture the branch/PR join key** — cheap, no-regret, unlocks Level 3.
-3. **Single-project path** — stitch one project's sessions into a lifecycle thread.
-4. **Multi-project campus** — overview + cross-project Decision Inbox.
+1. **Single-session literal cute office (MVP)** — the four already-emitted zones
+   (`reading`/`coding`/`testing`/`failed`) + the four small mapper additions
+   (thinking pulse, human desk, outbox, compaction) + the **`ObservedPlaybackReducer`**
+   (watchability) + the cute action vocabulary + a privacy-safe activity log.
+   The watchability reducer is **in the MVP**, not deferred — without it the
+   office isn't watchable, so it's the *first* thing to prototype against one
+   real dense session. Subagent fan-out shows only a **"helper requested" badge**
+   at this stage.
+2. **Capture the branch/PR join key** (with the confidence precedence) — cheap,
+   no-regret, unlocks Level 3.
+3. **Single-project path** — stitch one project's sessions into a lifecycle
+   thread, links drawn only at the confidence the join key supports.
+4. **Subagent expansion + helper characters / drill-down** (v0.3) — locate and
+   associate sidechain `agent-*.jsonl` files; promote the badge to a real
+   drillable helper.
+5. **Multi-project campus** — the metadata index + overview + cross-project
+   Decision Inbox. Furthest out; don't build until 1–3 are worth zooming into.
+
+> **One disagreement with the review, recorded deliberately:** the review's
+> sequencing bullets placed the watchability reducer *after* the MVP, but its own
+> closing line calls "prototype one dense session with a watchability reducer" the
+> right next move. Those conflict; this doc keeps watchability **in** the MVP,
+> because a single-session office without it isn't watchable at all. Everything
+> else from the review (zone-status precision, the reducer as a first-class
+> module, subagent drill-down → v0.3, join-key confidence, the index schema) is
+> adopted.
 
 ## Open questions / risks
 
