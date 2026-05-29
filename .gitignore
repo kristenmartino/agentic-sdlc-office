@@ -43,3 +43,7 @@ out/
 # Lockfiles for other package managers
 yarn.lock
 package-lock.json
+
+# Local Claude preview/session config (the rest of .claude/ — agents, hooks,
+# settings — IS committed; only this local preview launcher is ignored)
+.claude/launch.json

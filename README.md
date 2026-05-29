@@ -1,28 +1,38 @@
 # Agentic SDLC Office
 
-> A visual control room for AI-native software delivery. It helps humans understand, supervise, and govern autonomous coding agents across requirements, worktrees, files, diffs, tests, decisions, approvals, and PRs.
+> A visual control room for AI-native software delivery. It helps humans understand, supervise, and govern autonomous coding agents — making the work visible, replayable, inspectable, and human-governed.
 
-`v0.1` is a **mock visual workflow prototype** — eight specialist AI agents move work through an eight-room office while a human governs from a Decision Inbox. No real LLM calls yet; the demo is scripted from an event stream and runs entirely client-side.
+The app has **two modes**, and they answer two different questions:
+
+| Mode | What it is | Best for |
+| --- | --- | --- |
+| **Scripted** (v0.1) | An idealized 8-agent SDLC office — work moves through eight specialist rooms in a relay while a human governs from a Decision Inbox. Hand-authored event streams; no real LLM calls. | The *operating-model cartoon* — teaching/portfolio demo of how an agentic SDLC is *meant* to flow. |
+| **Observed** (v0.2 preview) | A *real* Claude Code session played back literally — one protagonist moving through activity zones (reading → coding → testing → …), derived from the session's transcript. Read-only. | The *honest tool* — seeing what an agent session actually did, smoothed enough to watch. |
+
+Scripted mode is the illustration; observed mode is the literal view. The app is explicit about which is which (a `v0.2 · observed` chip, a read-only banner, and `simulated P7` badges in scripted mode).
 
 ## What you'll see
 
-- **Two scripted scenarios.** `REQ-014 Add dark mode` (happy-path feature) and `BUG-032 Dashboard filter` (Observe → Intent incident loop). Switch via the dropdown at the top of the page.
-- **One observed scenario (v0.2 preview).** `Observed — Refactor button` plays a sample Claude Code session in read-only mode. The Decision Inbox shows a read-only notice; a banner near the top tags the session origin. Today the events come from a static fixture; v0.2 wires in the real transcript parser.
-- **8 agents, 8 rooms.** Each agent has a distinct silhouette, a primary room, and a real-time status. Click any sprite to open the Agent Drawer.
-- **Visible handoffs.** Sprites physically move between rooms when ownership transfers. A Phase Timeline at the top of the office shows where the work item is in the chain.
-- **Human-in-the-loop.** The Decision Inbox surfaces token-naming decisions, roll-forward vs roll-back choices, and **simulated P7 approvals** for merges/deploys.
-- **Replay + scrub.** The Activity Log shows every event in chronological order; click any past event to scrub state to that point. localStorage keeps state across refreshes.
+### Scripted mode — the 8-agent relay
+- **Two scenarios.** `REQ-014 — Add dark mode` (happy-path feature) and `BUG-032 — Filter loses date range` (Observe → Intent incident loop).
+- **8 agents, 8 rooms.** Each agent (Cora, Piper, Nova, Theo, Iris, Mira, Tess, Rune) has a distinct silhouette, a primary room, and a live status. Sprites physically move between rooms as ownership transfers; a Phase Timeline shows position in the chain.
+- **Human-in-the-loop.** The Decision Inbox surfaces decisions and **simulated P7 approvals** for merges/deploys.
+- **Replay + scrub.** The Activity Log lists every event; click any past event to scrub state to that point. localStorage persists across refreshes.
 
-## ⚠ Simulated only
+### Observed mode — real-session playback
+- **One scenario today:** `Observed — Refactor button (v0.2 preview)`, played from a synthetic sample that matches the real Claude Code transcript shape.
+- **One protagonist, activity zones.** A real session is one agent, not eight specialists — so observed mode shows a single 🤖 protagonist moving through activity zones (Reading, Coding, Testing, Thinking, Human, Outbox), with a cute per-action vocabulary ("the agent is at the workbench", "passed the checks").
+- **An honest, smoothed timeline.** Hundreds of raw events collapse into a small sequence of `VisualBeat`s (e.g. `reading ×2 → editing ×3 → running tests → tests passed`) — smoothed on top, literal underneath (each beat keeps its event count; drill-down shows display-safe refs).
+- **Read-only by contract.** Observed mode never surfaces resolvable decisions/approvals — the Decision Inbox shows a read-only notice. The 8-room relay is hidden (it's the scripted model); switch to a scripted scenario to see it.
 
-The Decision Inbox can show entries like `Merge PR #42 to main and deploy via flag`. These are **simulated P7 approvals**. v0.1 never:
+## ⚠ Simulated / read-only — never touches anything real
 
-- writes to GitHub
-- merges any branch
-- runs any deploy
-- calls any real LLM
+- **Scripted mode** can show `Merge PR #42 to main and deploy via flag` — these are **simulated P7 approvals** (red `P7 · sim` badge).
+- **Observed mode** is strictly read-only playback.
 
-The red `P7 · sim` badge on approval cards is the visual reminder.
+Neither mode ever: writes to GitHub · merges a branch · runs a deploy · calls a real LLM.
+
+**Privacy (observed mode):** raw prompts, Bash commands, stderr, `thinking` content, MCP inputs, attachments, and session ids are **never rendered**. Beat labels are generated from the *action category* only; Bash shows a category label, not the command; the drill-down shows `event 1 / event 2` refs, not the session-id-bearing raw ids. See [docs/architecture/claude-code-transcript-format.md](docs/architecture/claude-code-transcript-format.md).
 
 ## Setup
 
@@ -32,80 +42,90 @@ pnpm dev
 # → http://localhost:3000
 ```
 
-Node 18.18+. The Next.js app is App Router (Next 15 + React 19).
+Node 18.18+. Next.js App Router (Next 15 + React 19).
 
-## Demo flow (~2 min)
+## How to demo
 
-1. Open `http://localhost:3000` — empty office, 8 agents idle in their primary rooms.
-2. Pick **REQ-014** in the scenario dropdown (default).
-3. Click **Start Demo**.
-4. Watch the handoff chain: Piper → Nova → Theo.
-5. **Pause point 1:** Theo physically moves to the Human Office and the Decision Inbox surfaces the token-naming question. Pick either option to resume.
-6. Continues: Iris → Mira → Tess → Rune.
-7. **Pause point 2:** Cora visits Review/Security to collect Rune's review, returns to Human Office, surfaces the simulated P7 merge approval. Approve to finish.
-8. Run completes; the Phase Timeline flips its final pill green.
+**Scripted relay (~2 min each):**
+1. Pick **REQ-014 — Add dark mode** (default) → **Start Demo**.
+2. Watch the handoff chain Piper → Nova → Theo; at the decision pause, Theo walks to the Human Office and the Decision Inbox surfaces the token-naming question — pick an option to resume.
+3. Continues Iris → Mira → Tess → Rune → Cora; Cora collects the review and surfaces the simulated P7 merge approval. Approve to finish.
+4. Switch to **BUG-032** for the incident flow (Observe → Intent loop, expedited fix chain, roll-forward vs roll-back).
 
-Then switch to **BUG-032** for the incident flow (Rune starts in Observe mode, hands off to Piper, expedited fix chain, roll-forward vs roll-back decision).
+**Observed playback:**
+1. Pick **Observed — Refactor button (v0.2 preview)** → **Start Demo**.
+2. Watch the 🤖 protagonist move Reading → Coding → Testing as the timeline forms; the stage banner shows the current action and turns green on "passed the checks".
+3. Click any beat for the drill-down (event refs + counts only — no raw content).
 
-See [docs/portfolio/demo-script.md](docs/portfolio/demo-script.md) for the full narrated script.
+Full narrated script: [docs/portfolio/demo-script.md](docs/portfolio/demo-script.md).
+
+## What this is / is not
+
+**It is:**
+- A visual governance / control-room prototype for the agentic SDLC.
+- An experiment in making AI-agent work **visible, replayable, inspectable, and human-governed** — in two registers: a scripted operating-model demo and an observed real-session playback model.
+
+**It is not:**
+- A production autonomous deploy system.
+- A hosted SaaS, or an auth/billing app.
+- A replacement for GitHub / Jira / CI/CD — it sits *on top* as a visualization/governance layer.
+- A real GitHub writer or LLM runner (it reads and replays; it never acts).
 
 ## Tests + checks
 
 ```sh
 pnpm typecheck    # tsc --noEmit
-pnpm test         # vitest run — 81 tests across reducer, validator, parser stub, and Claude Code hooks
+pnpm test         # vitest run — 302 tests (reducer, validator, transcript parse/validate/map, playback reducer, view model, redaction, Claude Code hooks)
 pnpm build        # next build
 ```
 
 CI runs all three on every PR ([.github/workflows/ci.yml](.github/workflows/ci.yml)).
 
+## Architecture in one paragraph
+
+State is event-sourced. A scenario is a sorted array of `WorkflowEvent`s; the pure `applyEvent` reducer ([src/state/apply-event.ts](src/state/apply-event.ts)) folds them into `OfficeState`. The Zustand store ([src/state/officeStore.ts](src/state/officeStore.ts)) drives playback via `tick()`, handles human pauses via an `awaiting_human` run state, persists via `zustand/middleware/persist`, and supports scrub via `seekTo()`. **Observed mode** adds a transcript pipeline: `parseRawTranscript` → `validateRawTranscript` → `mapTranscriptToSession` (in [src/lib/](src/lib/)) turn a Claude Code JSONL transcript into `WorkflowEvent`s; `reduceObservedPlayback` collapses those into watchable `VisualBeat`s; `ObservedBeatTimeline` renders them. Redaction ([src/lib/redact.ts](src/lib/redact.ts)) keeps rendered output content-free. UI is DOM + Tailwind + Framer Motion.
+
 ## Repo layout
 
 ```
-.claude/               Claude Code subagent definitions + runtime guardrail hooks
+.claude/               Claude Code subagent definitions + runtime guardrail hooks (committed);
+                       local preview config (launch.json) is gitignored
 docs/
   product/             Project brief, ADLC model, MVP scope, roadmap
   agents/              Role catalog, permission ladder (P0–P7), escalation rules
-  design/              Art direction, character bible, room bible, office system
-  workflow/            Event model, work item / handoff / decision / blocker / quality gate models
-  architecture/        Data model
-  governance/          Decision log, risk register, approval policy, night-mode policy
-  demos/               REQ-014 + BUG-032 scenario specs
-  portfolio/           Case study outline, demo script
+  design/              Art direction, character/room bibles, office system, observed-office spec
+  workflow/            Event / work-item / handoff / decision / blocker / quality-gate models
+  architecture/        Data model, source-of-truth, Claude Code transcript format + discovery
+  governance/          Decision log, risk register, approval policy
+  demos/ · portfolio/  Scenario specs · case study, demo script
 prompts/               Product source-of-truth agent prompts
 src/
-  app/                 Next.js App Router entry
-  components/          Office, drawers, decision inbox, activity log, phase timeline, controls
+  app/                 Next.js App Router entry (mode-aware page)
+  components/          office/ (scripted relay), observed/ (beat timeline + view model), drawers, controls
   state/               Zustand store + pure applyEvent reducer
-  data/                Mock agents, rooms, work items, per-scenario event streams + observed-sample fixture
-  lib/                 Scenario validator, Claude Code parser (v0.2 stub)
-  types/               ADLC, agents, rooms, work items, workflow events, governance
+  data/                Mock agents/rooms/work items, scripted event streams, observed + transcript fixtures
+  lib/                 Scenario validator, runtime-unions, transcript parser/validator/mapper,
+                       observed playback reducer, redaction, timeline-position
+  types/               ADLC, agents, rooms, work items, workflow events, governance, transcript
 ```
-
-## Architecture in one paragraph
-
-State is event-sourced. A scenario is a sorted array of `WorkflowEvent`s; the pure `applyEvent` reducer ([src/state/apply-event.ts](src/state/apply-event.ts)) folds them into the `OfficeState`. The Zustand store ([src/state/officeStore.ts](src/state/officeStore.ts)) drives playback via `tick()` on an interval, handles human-in-the-loop pauses via an `awaiting_human` run state, persists across refreshes via `zustand/middleware/persist`, and supports scrub-to-event-N via `seekTo()`. The UI is plain DOM + Tailwind + Framer Motion (`layoutId` for sprite movement).
 
 ## Status & roadmap
 
 See [docs/product/now-next-later-never.md](docs/product/now-next-later-never.md). Short version:
 
-- **Now (v0.1)** — the mock prototype you're looking at
-- **Next (v0.2)** — local Claude Code event ingestion, real artifacts
-- **Later (v0.3 → v1.0)** — GitHub read/write, polished demo, deployable portfolio
-- **Future bets** (contingent on validation) — SaaS, auth, teams
-- **Strategic non-goals** — won't replace the SDLC, won't allow unsupervised prod deploys
+- **Done — Scripted v0.1.** Two scenarios, 8-room relay, movement choreography, Decision Inbox, replay/scrub, persistence, CI.
+- **Done — Observed v0.2 preview.** Transcript parse/validate/map pipeline, privacy-safe redaction, `ObservedPlaybackReducer`, `ObservedBeatTimeline`, activity zones, protagonist + action vocabulary — all on the synthetic observed sample.
+- **Future work (not built):** real redacted transcript fixture · local "load a session from disk" file loader · SVG protagonist + smooth motion polish · inter-session project path · multi-project campus.
+- **Strategic non-goals:** won't replace the SDLC, won't allow unsupervised prod deploys, no auth/billing/SaaS in the prototype.
 
 ## Screenshots / GIFs
 
-> Capture pass deferred. Placeholders below; replace with PNG/GIF in [`/assets/exported/`](assets/exported/) after running the demo.
+> Capture pass deferred. Replace placeholders in [`/assets/exported/`](assets/exported/) after running the demo.
 
-- [ ] `assets/exported/screenshots/office-idle.png` — empty office, 8 agents
-- [ ] `assets/exported/screenshots/req-014-decision.png` — Theo in Human Office, Decision Inbox open
-- [ ] `assets/exported/screenshots/req-014-completed.png` — green final pill + "Done" chip
-- [ ] `assets/exported/screenshots/bug-032-incident-banner.png` — red incident overlay
-- [ ] `assets/exported/gifs/req-014-handoff-chain.gif` — full play (90 s)
-- [ ] `assets/exported/gifs/cora-courier.gif` — Cora's review-security round-trip
+- [ ] `screenshots/req-014-decision.png` — Theo in Human Office, Decision Inbox open (scripted)
+- [ ] `screenshots/observed-timeline.png` — protagonist + zone lanes mid-playback (observed)
+- [ ] `gifs/req-014-handoff-chain.gif` — full scripted play
+- [ ] `gifs/observed-playback.gif` — 🤖 moving through zones
 
 ## Contributing
 
