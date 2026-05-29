@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import { useOfficeStore } from "@/state/officeStore";
 import { SCENARIOS } from "@/data/scenarios";
 import Office from "@/components/office/Office";
@@ -11,6 +12,8 @@ import DecisionInbox from "@/components/decisions/DecisionInbox";
 import ActivityLog from "@/components/activity/ActivityLog";
 import AgentDrawer from "@/components/drawers/AgentDrawer";
 import WorkItemDrawer from "@/components/drawers/WorkItemDrawer";
+import ObservedBeatTimeline from "@/components/observed/ObservedBeatTimeline";
+import { reduceObservedPlayback } from "@/lib/observed-playback-reducer";
 
 export default function Page() {
   const scenarioId = useOfficeStore((s) => s.scenarioId);
@@ -23,6 +26,9 @@ export default function Page() {
   const runState = useOfficeStore((s) => s.runState);
 
   const scenario = SCENARIOS[scenarioId];
+  // Render spike: for observed mode, reduce the replayed event log into
+  // VisualBeats so the timeline forms live as playback advances.
+  const observedBeats = useMemo(() => reduceObservedPlayback(log), [log]);
   const isIncident = scenario.kind === "bug";
   const isObserved = scenario.source === "observed";
   const runHasStarted = log.length > 0;
@@ -58,12 +64,12 @@ export default function Page() {
           </p>
           {scenario.origin && (
             <p className="text-[10px] text-office-muted truncate font-mono">
-              {scenario.origin.source} · {scenario.origin.sessionId} · captured{" "}
+              {scenario.origin.source} · session loaded · captured{" "}
               {new Date(scenario.origin.capturedAt).toLocaleString()}
             </p>
           )}
           <p className="text-[10px] text-office-muted/80">
-            Sample fixture · real Claude Code transcript parser deferred to v0.2.
+            Sample fixture · parser/mapper preview · file loading not yet built.
           </p>
         </div>
       )}
@@ -111,6 +117,7 @@ export default function Page() {
 
       <div className="grid grid-cols-[1fr_320px] gap-4">
         <div className="flex flex-col gap-4">
+          {isObserved && <ObservedBeatTimeline beats={observedBeats} />}
           <PhaseTimeline />
           <Office />
           <HandoffIndicator />
