@@ -13,8 +13,10 @@ import { buildTimelineView } from "./observed-beat-view";
  * Honesty/privacy: this component renders ONLY `VisualBeat` fields via the
  * pure `buildTimelineView` model. It never receives or reads raw event
  * payloads, so no prompt / command / stderr / thinking / MCP / attachment
- * text can appear. Smoothed on top (few beats), literal underneath (every
- * beat carries its event ids for drill-down).
+ * text can appear. Smoothed on top (few beats), literal underneath: raw
+ * event ids stay upstream on the VisualBeat[] while the render model exposes
+ * only display-safe refs ("event 1", …) for drill-down — never the raw ids
+ * (which embed the session id).
  *
  * Deliberately NOT here: sprite animation, fabricated specialist handoffs,
  * multi-session paths, the campus. This is the smallest surface that answers
