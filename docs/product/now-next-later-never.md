@@ -16,21 +16,34 @@ Scope discipline. If it isn't on this board, it isn't planned for the named rele
 - CI on every PR
 - Persisted state (localStorage)
 
-## Next (v0.2)
+## Next (v0.2) — observed mode
 
-- Real local agent runtime observer — **spike landed in v0.1** ([docs/architecture/observer-spike.md](../architecture/observer-spike.md)); v0.2 wires the real Claude Code transcript parser
-- Claude Code event ingestion (read `.claude/`, prompt files, agent activity)
-- Real artifacts generated from agent activity instead of mocks
+**The observed-mode arc is built (on the synthetic sample).** Observed mode renders a real Claude Code session as a single-protagonist, zone-based activity timeline — the literal counterpart to the scripted relay. Done:
+
+- ✅ Transcript pipeline: `parseRawTranscript` → `validateRawTranscript` → `mapTranscriptToSession` ([docs/architecture/claude-code-transcript-format.md](../architecture/claude-code-transcript-format.md))
+- ✅ Privacy-safe redaction — no raw prompts / commands / stderr / thinking / MCP input / attachments / session ids reach the UI
+- ✅ `ObservedPlaybackReducer` — dense events → watchable `VisualBeat`s (truth-preserving, content-free)
+- ✅ `ObservedBeatTimeline` — sequence strip + activity zone lanes + safe drill-down
+- ✅ Coherent observed-mode page (zone timeline is the stage; the relay grid is scripted-only)
+- ✅ Cute protagonist + per-action vocabulary
+- ✅ Design spec ([docs/design/observed-office.md](../design/observed-office.md)) + reducer/view tests
+
+Still open for v0.2 → v0.3 (not built):
+
+- Real **redacted transcript fixture** (prove the pipeline on an actual session; redaction owned by a human)
+- Local **"load a session from disk"** file loader
 - Multiple work items in flight at once
-- Basic worktree / branch awareness
-- Local persistence beyond demo state (e.g. IndexedDB or a small embedded DB)
+- Basic worktree / branch awareness (capture the branch/PR join key)
+- Inter-session **project path** (stitch a project's sessions via the join key)
+- Local persistence beyond demo state (e.g. IndexedDB)
 
 ## Later (v0.3 → v1.0)
 
 - GitHub integration: Issues, PRs, Actions read/write
 - Real repo / file / diff visibility
 - Theme variants (night, incident, demo)
-- Polished sprite art and animation
+- Polished sprite art and animation — incl. observed-mode SVG protagonist + smooth `layoutId` motion (today it's an emoji avatar that jumps between lanes)
+- Multi-project **campus** overview (campus → project → session → activity zoom)
 - Portfolio case study and deployed demo
 - Local-first usable product mode (desktop or local web app)
 - Decision Inbox writes back to a real decision log on disk
