@@ -1,8 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import { motion, useReducedMotion } from "framer-motion";
 import type { BeatSeverity, VisualBeat } from "@/lib/observed-playback-reducer";
 import { buildTimelineView } from "./observed-beat-view";
+import ObservedProtagonist from "./ObservedProtagonist";
 
 /**
  * Render spike for observed mode — a minimal, honest view of a real session's
@@ -18,9 +20,12 @@ import { buildTimelineView } from "./observed-beat-view";
  * only display-safe refs ("event 1", …) for drill-down — never the raw ids
  * (which embed the session id).
  *
- * Deliberately NOT here: sprite animation, fabricated specialist handoffs,
- * multi-session paths, the campus. This is the smallest surface that answers
- * the aesthetic make-or-break question.
+ * The protagonist is a cute SVG robot (ObservedProtagonist) that glides between
+ * zone lanes via Framer Motion `layoutId` — the same shared-layout trick the
+ * scripted office uses to move agents between rooms (office/AgentSprite). It is
+ * reduced-motion aware and content-free (encodes only zone position + severity).
+ * Still deliberately NOT here: fabricated specialist handoffs, multi-session
+ * paths, the campus.
  */
 
 const SEVERITY_CHIP: Record<BeatSeverity, string> = {
@@ -55,6 +60,12 @@ export default function ObservedBeatTimeline({
   const [selectedId, setSelectedId] = useState<string | null>(defaultSelectedBeatId);
   const view = buildTimelineView(beats, selectedId);
 
+  // The protagonist glides between lanes; reduced-motion users get an instant cut.
+  const reduceMotion = useReducedMotion();
+  const glide = reduceMotion
+    ? { duration: 0 }
+    : { type: "spring" as const, stiffness: 500, damping: 34 };
+
   if (beats.length === 0) {
     return (
       <section
@@ -84,12 +95,7 @@ export default function ObservedBeatTimeline({
           Honest: a real session is one unnamed agent, so no specialist cast. */}
       {view.stage && (
         <div className={`flex items-center gap-2.5 rounded-md border px-2.5 py-1.5 ${STAGE_TINT[view.stage.severity]}`}>
-          <span
-            className="text-base leading-none animate-pulse-soft motion-reduce:animate-none select-none"
-            aria-hidden
-          >
-            🤖
-          </span>
+          <ObservedProtagonist severity={view.stage.severity} active size={26} />
           <span className="text-base leading-none select-none" aria-hidden>
             {view.stage.glyph}
           </span>
@@ -141,8 +147,14 @@ export default function ObservedBeatTimeline({
             }`}>
               {lane.label}
             </span>
-            <span className="w-4 shrink-0 text-center text-xs leading-none select-none" aria-hidden>
-              {lane.active ? "🤖" : ""}
+            {/* Avatar slot — same box in every lane so the protagonist glides
+                vertically (same column, changing row) when the active zone moves. */}
+            <span className="w-6 h-6 shrink-0 flex items-center justify-center" aria-hidden>
+              {lane.active && view.stage && (
+                <motion.span layoutId="observed-protagonist" transition={glide} className="block">
+                  <ObservedProtagonist severity={view.stage.severity} active size={20} />
+                </motion.span>
+              )}
             </span>
             <div className="flex flex-wrap gap-1">
               {lane.beats.map((b) => (
