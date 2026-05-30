@@ -7,7 +7,7 @@ The app has **two modes**, and they answer two different questions:
 | Mode | What it is | Best for |
 | --- | --- | --- |
 | **Scripted** (v0.1) | An idealized 8-agent SDLC office — work moves through eight specialist rooms in a relay while a human governs from a Decision Inbox. Hand-authored event streams; no real LLM calls. | The *operating-model cartoon* — teaching/portfolio demo of how an agentic SDLC is *meant* to flow. |
-| **Observed** (v0.2 preview) | A *real* Claude Code session played back literally — one protagonist moving through activity zones (reading → coding → testing → …), derived from the session's transcript. Read-only. | The *honest tool* — seeing what an agent session actually did, smoothed enough to watch. |
+| **Observed** (v0.2 preview) | A read-only Claude Code *transcript playback model* — one protagonist moving through activity zones (reading → coding → testing → …), built from transcript-shaped events. The current demo plays a synthetic sample matching the real transcript shape; loading a real redacted session is future work. | The *honest-tool direction* — what an agent session actually did, smoothed enough to watch. |
 
 Scripted mode is the illustration; observed mode is the literal view. The app is explicit about which is which (a `v0.2 · observed` chip, a read-only banner, and `simulated P7` badges in scripted mode).
 
@@ -19,8 +19,8 @@ Scripted mode is the illustration; observed mode is the literal view. The app is
 - **Human-in-the-loop.** The Decision Inbox surfaces decisions and **simulated P7 approvals** for merges/deploys.
 - **Replay + scrub.** The Activity Log lists every event; click any past event to scrub state to that point. localStorage persists across refreshes.
 
-### Observed mode — real-session playback
-- **One scenario today:** `Observed — Refactor button (v0.2 preview)`, played from a synthetic sample that matches the real Claude Code transcript shape.
+### Observed mode — transcript playback
+- **One scenario today:** `Observed — Refactor button (v0.2 preview)`, played from a synthetic sample that matches the real Claude Code transcript shape. (Loading a real redacted session is future work — see the roadmap.)
 - **One protagonist, activity zones.** A real session is one agent, not eight specialists — so observed mode shows a single 🤖 protagonist moving through activity zones (Reading, Coding, Testing, Thinking, Human, Outbox), with a cute per-action vocabulary ("the agent is at the workbench", "passed the checks").
 - **An honest, smoothed timeline.** Hundreds of raw events collapse into a small sequence of `VisualBeat`s (e.g. `reading ×2 → editing ×3 → running tests → tests passed`) — smoothed on top, literal underneath (each beat keeps its event count; drill-down shows display-safe refs).
 - **Read-only by contract.** Observed mode never surfaces resolvable decisions/approvals — the Decision Inbox shows a read-only notice. The 8-room relay is hidden (it's the scripted model); switch to a scripted scenario to see it.
@@ -63,7 +63,7 @@ Full narrated script: [docs/portfolio/demo-script.md](docs/portfolio/demo-script
 
 **It is:**
 - A visual governance / control-room prototype for the agentic SDLC.
-- An experiment in making AI-agent work **visible, replayable, inspectable, and human-governed** — in two registers: a scripted operating-model demo and an observed real-session playback model.
+- An experiment in making AI-agent work **visible, replayable, inspectable, and human-governed** — in two registers: a scripted operating-model demo and an observed transcript-playback model.
 
 **It is not:**
 - A production autonomous deploy system.
@@ -120,7 +120,7 @@ See [docs/product/now-next-later-never.md](docs/product/now-next-later-never.md)
 
 ## Screenshots / GIFs
 
-> Capture pass deferred. Replace placeholders in [`/assets/exported/`](assets/exported/) after running the demo.
+> Capture pass deferred. Paths below are relative to [`assets/exported/`](assets/exported/); drop the captures there after running the demo.
 
 - [ ] `screenshots/req-014-decision.png` — Theo in Human Office, Decision Inbox open (scripted)
 - [ ] `screenshots/observed-timeline.png` — protagonist + zone lanes mid-playback (observed)
