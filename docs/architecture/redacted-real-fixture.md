@@ -31,8 +31,10 @@ Shape and relationships are preserved; values are replaced. Specifically:
 - **All timestamps are synthetic**, on a uniform incrementing base.
 - **All paths are placeholders** (`/Users/example/sample-repo/…`) — no real
   username, home path, or repo path.
-- **All content is stripped**: user prompts, assistant text, `tool_result`
-  content, `stdout`/`stderr`, `Edit` strings, and `originalFile` are `[redacted]`.
+- **All original session content is stripped**: user prompts, assistant text,
+  `tool_result` content, `stdout`/`stderr`, `Edit` strings, and `originalFile`
+  are `[redacted]`. (The safe synthetic scaffolding below is *added* content,
+  not original — see that section.)
 - **No `thinking` blocks**, no attachment payloads, no MCP server names, no
   emails, URLs, branch names beyond a generic `main`, or token/key-shaped strings.
 
