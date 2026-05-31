@@ -114,8 +114,9 @@ src/
 See [docs/product/now-next-later-never.md](docs/product/now-next-later-never.md). Short version:
 
 - **Done — Scripted v0.1.** Two scenarios, 8-room relay, movement choreography, Decision Inbox, replay/scrub, persistence, CI.
-- **Done — Observed v0.2 preview.** Transcript parse/validate/map pipeline, privacy-safe redaction, `ObservedPlaybackReducer`, `ObservedBeatTimeline`, activity zones, protagonist + action vocabulary — all on the synthetic observed sample.
-- **Future work (not built):** real redacted transcript fixture · local "load a session from disk" file loader · SVG protagonist + smooth motion polish · inter-session project path · multi-project campus.
+- **Done — Observed v0.2.** Transcript parse/validate/map pipeline, privacy-safe redaction, `ObservedPlaybackReducer`, `ObservedBeatTimeline`, activity zones, SVG protagonist + smooth motion — proven on both the synthetic sample and a **real redacted transcript fixture**.
+- **Next direction:** a privacy-safe **agent session evidence pack** — turn an observed session into a review artifact a human reads *instead of* the raw transcript ([docs/product/next-phase-agent-session-evidence-pack.md](docs/product/next-phase-agent-session-evidence-pack.md)).
+- **Later (gated):** session file loader · live tailing · inter-session project path · multi-project campus · GitHub integration.
 - **Strategic non-goals:** won't replace the SDLC, won't allow unsupervised prod deploys, no auth/billing/SaaS in the prototype.
 
 ## Screenshots / GIFs
