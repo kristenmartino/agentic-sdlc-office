@@ -101,4 +101,22 @@ describe("redacted real-format transcript fixture", () => {
       expect(serialized.includes(probe), `render model leaked: ${probe}`).toBe(false);
     }
   });
+
+  it("the committed fixture file itself carries no obvious private markers", () => {
+    // Defense in depth: the render-model test above is the UI-safety gate, but
+    // the fixture is committed to a public repo, so assert the raw bytes too.
+    // Allowlist-aware — the placeholder path is expected/allowed.
+    const raw = fixtureJsonl();
+    expect(raw).not.toContain("rootk");
+    expect(raw).not.toContain("/Users/rootk");
+    expect(raw).not.toContain("/home/");
+    expect(raw).not.toContain("/root/");
+    expect(raw).not.toContain("floofy"); // the original (random) session slug
+    expect(raw).not.toContain("thinking"); // raw model reasoning must never ship
+    expect(raw).not.toMatch(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i); // emails
+    expect(raw).not.toMatch(/sk-[A-Za-z0-9_-]{10,}/); // api-key-shaped
+    expect(raw).not.toMatch(/ghp_[A-Za-z0-9]{20,}/); // github-token-shaped
+    // The placeholder path is expected — it preserves path-shaped structure.
+    expect(raw).toContain("/Users/example/sample-repo");
+  });
 });

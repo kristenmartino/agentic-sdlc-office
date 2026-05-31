@@ -54,12 +54,20 @@ anything.
 ## Audit (before commit)
 
 The redacted scratch file was scanned outside the repo for leakage —
-`/Users/`, `/home/`, `/root/`, usernames, real UUIDs, emails, GitHub URLs,
-branch names, tokens/keys, raw commands, raw stdout/stderr, raw prompts, raw
-assistant text, `thinking`, attachments, MCP payloads — and run through the full
-pipeline to confirm the **serialized render model contains none** of the
-transcript's identifiers, paths, commands, or content. Only after that did it
-enter the repo.
+**non-placeholder** home paths (`/Users/<real-user>`, `/home/<real-user>`,
+`/root`), usernames, real UUIDs, emails, GitHub URLs, branch names, tokens/keys,
+raw commands, raw stdout/stderr, raw prompts, raw assistant text, `thinking`,
+attachments, MCP payloads — and run through the full pipeline to confirm the
+**serialized render model contains none** of the transcript's identifiers,
+paths, commands, or content. Only after that did it enter the repo.
+
+The scan is **allowlist-aware**: the fixture intentionally retains the
+placeholder path `/Users/example/sample-repo` to preserve path-shaped transcript
+structure, so the audit rejects real home paths (`/Users/<real-user>`), not the
+literal substring `/Users/`. The committed-fixture test
+([`observed-real-fixture.test.ts`](../../src/lib/observed-real-fixture.test.ts))
+encodes this: it asserts the raw bytes carry no private markers while allowing
+the placeholder path.
 
 ## What it covers
 
