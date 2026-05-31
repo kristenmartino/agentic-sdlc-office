@@ -18,7 +18,7 @@ Scope discipline. If it isn't on this board, it isn't planned for the named rele
 
 ## Shipped — observed mode (v0.2 checkpoint)
 
-**Observed mode is built and proven.** It renders a real Claude Code session as a single-protagonist, zone-based activity timeline — the literal counterpart to the scripted relay.
+**Observed mode is built and proven as a transcript-playback model.** It renders Claude Code transcript-shaped events as a single-protagonist, zone-based activity timeline — the literal counterpart to the scripted relay. The pipeline is proven on the synthetic sample and a real-format redacted fixture; loading a raw real session remains future work.
 
 - ✅ Transcript pipeline: `parseRawTranscript` → `validateRawTranscript` → `mapTranscriptToSession` ([docs/architecture/claude-code-transcript-format.md](../architecture/claude-code-transcript-format.md))
 - ✅ Privacy-safe redaction — no raw prompts / commands / stderr / thinking / MCP input / attachments / session ids reach the UI

@@ -67,9 +67,17 @@ The same privacy contract as the observed render model — by construction:
 
 ## Privacy / redaction principles
 
-- **Derive from the already-safe model, never the raw transcript.** The pack is
-  built from `ParsedClaudeCodeSession` / `WorkflowEvent[]` (already content-free)
-  and the `VisualBeat[]` summary — *not* from raw lines.
+- **Build from the parsed event model via an explicit allowlist — do NOT assume
+  `WorkflowEvent[]` is content-free.** Some events carry raw free text: e.g.
+  `agent.message.sent.message` holds raw assistant text and raw user-prompt
+  content (the observed *render model* is safe only because the reducer/view
+  never read that field). The evidence pack must therefore consume **only
+  allowlisted, content-safe inputs** — `VisualBeat` labels/counts, event
+  `type`/`status`, safe artifact/gate/blocker metadata, and redaction notes —
+  and must **ignore arbitrary free-text payloads** (e.g. `agent.message.sent`)
+  unless they are known-safe mapper-generated category labels (e.g.
+  `safeBashCommandLabel` output). Never read raw message text, prompts,
+  commands, stderr/stdout, thinking, raw ids, raw paths, or raw event ids.
 - **Category labels + counts, not payloads.** "Ran test command", "edited 1
   file ×3", "read 2 files" — never the command, never the diff.
 - **Reuse the existing redaction helpers** (`src/lib/redact.ts`) for any string
@@ -89,7 +97,8 @@ Pure logic + docs. **No UI, no file loader, no downloads, no GitHub writes.**
    blockers, human touchpoints, reviewer-focus highlights, redaction notes. No
    raw payload fields.
 2. **`buildEvidencePack(session | events): EvidencePack`** — pure, deterministic
-   reducer/selector. Unit-tested. No UI.
+   reducer/selector. Reads **only allowlisted, content-safe fields** (see Privacy
+   principles); never raw `message`/command/text payloads. Unit-tested. No UI.
 3. **`renderEvidencePackMarkdown(pack): string`** — pure renderer → safe
    markdown, including the redaction disclaimer.
 4. **Tests against both fixtures** — the synthetic sample *and* the real redacted
@@ -110,8 +119,8 @@ Pure logic + docs. **No UI, no file loader, no downloads, no GitHub writes.**
 - A human can read the markdown pack and answer the 10 questions above **without
   opening the raw transcript**.
 - The serialized pack contains **zero** raw payload content (test-enforced).
-- The pack is generated identically from the synthetic sample and the real
-  redacted fixture.
+- The pack is generated through the same code path for the synthetic sample and
+  the real redacted fixture (the packs differ in content; the path is identical).
 - `buildEvidencePack` and the renderer are **pure and fully unit-tested**; no UI,
   parser, or file-loader changes required to ship the MVP.
 
