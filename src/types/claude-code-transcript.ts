@@ -44,11 +44,14 @@ export interface ToolUseBlock {
   /** Arbitrary tool-specific input. */
   input: Record<string, unknown>;
   /**
-   * Attribution string indicating which Claude Code sub-flow initiated the
-   * tool call. Real transcripts populate this; optional on the type because
-   * older sessions may omit it.
+   * Claude Code attribution metadata for which sub-flow initiated the tool
+   * call. Observed as object-shaped (e.g. `{ type: "direct" }`) in real-format
+   * transcripts, and as a plain string in older sessions — so it's typed
+   * `unknown` and treated as opaque: the mapper never reads it and it's never
+   * rendered. (The real-format fixture in src/data/ is the evidence for the
+   * object shape; see docs/architecture/redacted-real-fixture.md.)
    */
-  caller?: string;
+  caller?: unknown;
 }
 
 export interface ToolResultBlock {

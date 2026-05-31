@@ -292,11 +292,19 @@ describe("validateRawTranscript — line types added after real-transcript disco
 });
 
 describe("validateRawTranscript — additive envelope fields", () => {
-  it("accepts tool_use blocks with the optional 'caller' field", () => {
-    const issues = validateRawTranscript(parseRawTranscript(
+  it("accepts tool_use blocks with a string OR object-shaped 'caller' field", () => {
+    // Older sessions carry a string; real-format transcripts carry an object
+    // (e.g. {"type":"direct"}). `caller` is typed `unknown` and never read, so
+    // the validator must accept both without assuming string semantics.
+    const stringCaller = validateRawTranscript(parseRawTranscript(
       '{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"Read","input":{},"caller":"main"}]}}',
     ));
-    expect(issues).toEqual([]);
+    expect(stringCaller).toEqual([]);
+
+    const objectCaller = validateRawTranscript(parseRawTranscript(
+      '{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"t2","name":"Read","input":{},"caller":{"type":"direct"}}]}}',
+    ));
+    expect(objectCaller).toEqual([]);
   });
 
   it("accepts user lines with the optional top-level 'toolUseResult' sibling field", () => {
