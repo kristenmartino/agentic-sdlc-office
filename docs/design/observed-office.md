@@ -82,7 +82,7 @@ mapper currently drops it or emits it as a neutral message):
 | Zone | Real signal | Today | Needs |
 | --- | --- | --- | --- |
 | Thinking Corner | `thinking` block | **dropped** (`continue`) | emit a neutral status *pulse* — shape only, **never the text** |
-| Human Desk | `AskUserQuestion` | neutral `agent.message.sent` | route to `waiting_on_human` (or a `human_consulted` marker) |
+| Human Desk | `AskUserQuestion` | neutral `agent.message.sent` | a non-blocking `human_consulted` marker (see Governance — *not* `waiting_on_human`, which reads as present-tense "blocked on you") |
 | Outbox | `pr-link` | `artifact.produced (code_pr)`, no status | a terminal Outbox/`done` visual state |
 | (transition) | `compact_boundary` | marker message | a "tidying memory" visual beat |
 
@@ -134,6 +134,18 @@ with no resolver) and never surfaces a resolvable Decision Inbox item. If a
 future feature wants to record these, it uses a new **non-blocking**
 `human.consulted`-style event, never the scripted decision path.
 
+**Use a dedicated `human_consulted` / `human_touchpoint` marker — not the
+`waiting_on_human` status.** Precision worth recording: `waiting_on_human` is an
+`AgentStatus` and is purely cosmetic today (a pulsing orange bubble + label in
+`StatusBubble`/`AgentSprite`); it is *not* actionable. The actionable state is
+the separate `awaiting_human` **runState**, which halts the tick loop and is what
+this doc keeps out of observed mode. So the risk isn't state-machine coupling —
+it's **honest tense**. The pulsing "waiting on human" bubble reads as present-tense
+*"the app is blocked on you right now,"* which is a lie in a replay where the human
+was consulted in the *past*. A `human_consulted` marker says "a human was asked
+here" — past, informational, correct. Only fall back to `waiting_on_human` if the
+renderer guarantees it reads as informational in observed mode.
+
 ## The watchability layer — a first-class reducer, not a design note
 
 A real session is **fast and dense** — hundreds of interleaved tool calls. A
@@ -162,7 +174,12 @@ React effect and become untestable.
 //     view concern, never a data-loss concern)
 
 interface VisualBeat {
+  id: string;                  // stable key for the renderer
   zone: ObservedZone;          // reading | coding | testing | thinking | human | outbox
+  action:                      // the specific cute action — zone alone is too coarse
+    | "read" | "edit" | "test_run" | "test_pass" | "test_fail"
+    | "think" | "human_consulted" | "outbox" | "compact" | "blocked";
+  severity?: "info" | "success" | "warning" | "error";  // drives color/tone
   startTs: string;
   endTs: string;
   eventCount: number;          // how many raw events collapsed into this beat
@@ -213,8 +230,9 @@ edge above the confidence the data supports:
 
 | Join key (in precedence order) | Confidence |
 | --- | --- |
-| PR URL / PR number (from `pr-link`) | **high** |
+| PR URL, **or** repo + PR number (from `pr-link`) | **high** |
 | repo + `gitBranch` + `cwd` | **medium** |
+| bare PR number (no repo) | **low** — a PR number isn't globally unique |
 | encoded project folder + `sessionId` (fallback) | **low** (no real cross-session claim) |
 
 This directly answers the orchestrator-chaining panel's "reconstruction
@@ -267,6 +285,16 @@ folders on disk today).
   }
   ```
 
+  `projectKey` is derived from the same precedence as the Level-3 join key, so
+  Levels 3 and 4 can never invent incompatible keys:
+
+  ```ts
+  projectKey =
+      `pr:${normalizedPrUrl}`                       // high   (PR URL, or repo + PR#)
+    | `repo-branch:${repo}#${branch}#${cwdHash}`    // medium
+    | `session:${encodedProjectFolder}#${sessionId}` // low (no cross-session claim)
+  ```
+
 ## Honesty & privacy invariants (carried forward, already built)
 
 These hold at every zoom level and are non-negotiable:
@@ -302,14 +330,20 @@ These hold at every zoom level and are non-negotiable:
 
 ## Sequencing (each step independently shippable)
 
-1. **Single-session literal cute office (MVP)** — the four already-emitted zones
-   (`reading`/`coding`/`testing`/`failed`) + the four small mapper additions
-   (thinking pulse, human desk, outbox, compaction) + the **`ObservedPlaybackReducer`**
-   (watchability) + the cute action vocabulary + a privacy-safe activity log.
-   The watchability reducer is **in the MVP**, not deferred — without it the
-   office isn't watchable, so it's the *first* thing to prototype against one
-   real dense session. Subagent fan-out shows only a **"helper requested" badge**
-   at this stage.
+**Spike 0 — the watchability prototype (do this first, before anything else).**
+One real dense transcript → `WorkflowEvent[]` → `ObservedPlaybackReducer` →
+`VisualBeat[]` → rough visual playback. The *entire* question that gates the
+product: **is a real dense session pleasant to watch once smoothed?** This is a
+throwaway prototype, not production UI — no zones polish, no campus, no join key.
+If the answer is "no, even smoothed it's noise or it's a lie," stop here; nothing
+downstream matters. Keeping this separate from the MVP protects against a bloated
+"MVP" that stalls before the hard question is even asked.
+
+1. **MVP — single-session literal cute office** — zones (the four already-emitted
+   + the four small mapper additions: thinking pulse, `human_consulted`, outbox,
+   compaction) + the productionized `ObservedPlaybackReducer` + the cute action
+   vocabulary + a privacy-safe activity log. Subagent fan-out shows only a
+   **"helper requested" badge**.
 2. **Capture the branch/PR join key** (with the confidence precedence) — cheap,
    no-regret, unlocks Level 3.
 3. **Single-project path** — stitch one project's sessions into a lifecycle
@@ -319,6 +353,10 @@ These hold at every zoom level and are non-negotiable:
    drillable helper.
 5. **Multi-project campus** — the metadata index + overview + cross-project
    Decision Inbox. Furthest out; don't build until 1–3 are worth zooming into.
+
+The watchability reducer appears in **both** Spike 0 (throwaway, to answer the
+gating question) and the MVP (productionized). It is never *deferred* — see the
+note below.
 
 > **One disagreement with the review, recorded deliberately:** the review's
 > sequencing bullets placed the watchability reducer *after* the MVP, but its own
