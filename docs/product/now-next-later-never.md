@@ -16,34 +16,41 @@ Scope discipline. If it isn't on this board, it isn't planned for the named rele
 - CI on every PR
 - Persisted state (localStorage)
 
-## Next (v0.2) — observed mode
+## Shipped — observed mode (v0.2 checkpoint)
 
-**The observed-mode arc is built (on the synthetic sample).** Observed mode renders a real Claude Code session as a single-protagonist, zone-based activity timeline — the literal counterpart to the scripted relay. Done:
+**Observed mode is built and proven as a transcript-playback model.** It renders Claude Code transcript-shaped events as a single-protagonist, zone-based activity timeline — the literal counterpart to the scripted relay. The pipeline is proven on the synthetic sample and a real-format redacted fixture; loading a raw real session remains future work.
 
 - ✅ Transcript pipeline: `parseRawTranscript` → `validateRawTranscript` → `mapTranscriptToSession` ([docs/architecture/claude-code-transcript-format.md](../architecture/claude-code-transcript-format.md))
 - ✅ Privacy-safe redaction — no raw prompts / commands / stderr / thinking / MCP input / attachments / session ids reach the UI
 - ✅ `ObservedPlaybackReducer` — dense events → watchable `VisualBeat`s (truth-preserving, content-free)
 - ✅ `ObservedBeatTimeline` — sequence strip + activity zone lanes + safe drill-down
 - ✅ Coherent observed-mode page (zone timeline is the stage; the relay grid is scripted-only)
-- ✅ Cute protagonist + per-action vocabulary
-- ✅ Design spec ([docs/design/observed-office.md](../design/observed-office.md)) + reducer/view tests
+- ✅ Cute SVG protagonist + smooth `layoutId` motion + per-action vocabulary
+- ✅ **Real redacted transcript fixture** — pipeline proven on real-format input, render model leak-tested ([docs/architecture/redacted-real-fixture.md](../architecture/redacted-real-fixture.md))
+- ✅ Design spec ([docs/design/observed-office.md](../design/observed-office.md)) + reducer / view / fixture tests
 
-Still open for v0.2 → v0.3 (not built):
+## Next — Agent Session Evidence Pack
 
-- Real **redacted transcript fixture** (prove the pipeline on an actual session; redaction owned by a human)
-- Local **"load a session from disk"** file loader
+**Turn an observed session into a privacy-safe markdown/report artifact** a human can review without reading the raw transcript. This is the product wedge: *AI coding-agent session replay + review evidence*. Full spec: [next-phase-agent-session-evidence-pack.md](next-phase-agent-session-evidence-pack.md).
+
+MVP — pure logic + docs; **no UI, no file loader, no GitHub writes**:
+
+- `EvidencePack` data model (typed, content-free)
+- `buildEvidencePack(session | events)` — pure reducer/selector, unit-tested
+- `renderEvidencePackMarkdown(pack)` — safe markdown + redaction disclaimer
+- Tests against the synthetic sample **and** the real redacted fixture (expected sections present, forbidden raw content absent)
+
+## Later (gated on the evidence-pack MVP)
+
+- Evidence-pack **export / download** + in-app panel; PR-review version (GitHub PR comment / attached artifact — **no GitHub writes in MVP**)
+- Local **"load a session from disk"** file loader (feeds the evidence pack)
+- **Live tailing** of an in-progress session
 - Multiple work items in flight at once
-- Basic worktree / branch awareness (capture the branch/PR join key)
-- Inter-session **project path** (stitch a project's sessions via the join key)
-- Local persistence beyond demo state (e.g. IndexedDB)
-
-## Later (v0.3 → v1.0)
-
-- GitHub integration: Issues, PRs, Actions read/write
-- Real repo / file / diff visibility
-- Theme variants (night, incident, demo)
-- Polished sprite art and animation — incl. observed-mode SVG protagonist + smooth `layoutId` motion (today it's an emoji avatar that jumps between lanes)
+- Worktree / branch awareness + inter-session **project path** (stitch a project's sessions via a branch/PR join key)
 - Multi-project **campus** overview (campus → project → session → activity zoom)
+- Local persistence beyond demo state (e.g. IndexedDB)
+- GitHub integration: Issues, PRs, Actions read/write; real repo / file / diff visibility
+- Theme variants (night, incident, demo); further sprite / motion polish
 - Portfolio case study and deployed demo
 - Local-first usable product mode (desktop or local web app)
 - Decision Inbox writes back to a real decision log on disk
