@@ -232,6 +232,33 @@ passes it through verbatim under a fixed, content-safe filename. Pure descriptor
 a thin browser trigger that no-ops off the DOM (SSR/tests). Still no file loader,
 clipboard, GitHub writes, or network — just the browser file API.
 
+## Implementation notes — local transcript loading (#65, first cut)
+
+The artifact is built, so the loader can now feed it real input. A local-only,
+read-only `.jsonl` import lives on the observed surface
+(`src/components/observed/LocalTranscriptLoader.tsx` +
+`local-transcript-view.ts`): pick a Claude Code session from your machine, it's
+read in the browser via `file.text()`, run through the existing pipeline
+(`parseRawTranscript` → `validateRawTranscript` → `mapTranscriptToSession` →
+`validateScenario` gate → `reduceObservedPlayback` / `buildEvidencePack` /
+`renderEvidencePackMarkdown`), and shown through the same timeline + Evidence
+Pack components — with the same export button. Held in React state only; nothing
+is uploaded, persisted, or sent.
+
+Untrusted-input handling is the load-bearing part: the file is treated as
+hostile. Failures return a SAFE summary only (a generic message + issue count +
+numeric line) — never the offending line, the raw `JSON.parse` message, or a
+validator `issue.message` (both can echo file content). Enforced by test
+(`local-transcript-view.test.ts`): the real redacted fixture loads cleanly and
+its renderable surfaces (timeline render model + markdown) carry none of the
+forbidden tokens, while malformed / wrong-shape / unknown-type inputs stuffed
+with secrets all fail safe with nothing echoed.
+
+Deliberately **not** here (still later): live tailing, folder picker,
+multi-session list, persistence/IndexedDB, auto-reading `~/.claude`, project
+paths, or any GitHub integration. This first cut is a proof of utility, not a
+local session manager.
+
 ## Related
 
 - [now-next-later-never.md](now-next-later-never.md) — roadmap placement
