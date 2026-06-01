@@ -1,29 +1,37 @@
 "use client";
 
 import { useState, type ChangeEvent } from "react";
-import ObservedBeatTimeline from "./ObservedBeatTimeline";
-import EvidencePackPanel from "./EvidencePackPanel";
 import {
   parseLocalTranscriptToObservedView,
   type LocalTranscriptResult,
 } from "./local-transcript-view";
 
 /**
- * LocalTranscriptLoader — read-only, local-only `.jsonl` import for observed
- * mode (#65). Lets a user pick a Claude Code transcript from their own machine
- * and view it through the existing safe pipeline (timeline + Evidence Pack).
+ * LocalTranscriptLoader — read-only, local-only `.jsonl` import card for observed
+ * mode (#65). Lets a user pick a Claude Code transcript from their own machine;
+ * a successful load takes over the observed stage (handled by the parent
+ * `ObservedStage`, #66 polish), replacing the bundled demo sample.
+ *
+ * CONTROLLED: this card owns only the transient "reading" state. The parsed
+ * `result` is lifted up via `onResult` so the stage can switch its active source;
+ * `onClear` returns to the bundled sample. The card itself renders only the
+ * input, a safe status, and — on failure — a SAFE error summary (count / line
+ * number), never the raw offending content. It does NOT render the loaded
+ * timeline / Evidence Pack; the parent does, through the shared safe components.
  *
  * Strictly local & read-only: the file is read in the browser via `file.text()`,
  * parsed by the pure `parseLocalTranscriptToObservedView`, and held in React
- * state only — never uploaded, persisted, or written anywhere. On failure it
- * shows a safe summary (count / line number), never the raw offending content.
- *
- * It renders only the content-free outputs (beats + the already-safe evidence
- * markdown) through the same `ObservedBeatTimeline` / `EvidencePackPanel`
- * components the bundled sample uses, so no raw transcript text can reach the UI.
+ * state only — never uploaded, persisted, or written anywhere.
  */
-export default function LocalTranscriptLoader() {
-  const [result, setResult] = useState<LocalTranscriptResult | null>(null);
+export default function LocalTranscriptLoader({
+  result,
+  onResult,
+  onClear,
+}: {
+  result: LocalTranscriptResult | null;
+  onResult: (result: LocalTranscriptResult) => void;
+  onClear: () => void;
+}) {
   const [busy, setBusy] = useState(false);
 
   async function onFile(event: ChangeEvent<HTMLInputElement>) {
@@ -34,9 +42,9 @@ export default function LocalTranscriptLoader() {
     setBusy(true);
     try {
       const text = await file.text();
-      setResult(parseLocalTranscriptToObservedView(text));
+      onResult(parseLocalTranscriptToObservedView(text));
     } catch {
-      setResult({ ok: false, message: "Could not read the selected file." });
+      onResult({ ok: false, message: "Could not read the selected file." });
     } finally {
       setBusy(false);
     }
@@ -57,7 +65,8 @@ export default function LocalTranscriptLoader() {
       <p className="text-[10px] text-office-muted/80 leading-snug">
         Pick a Claude Code <span className="font-mono">.jsonl</span> session from your machine. It is
         parsed in your browser and shown through the same privacy-safe observed view — nothing is
-        uploaded, saved, or sent anywhere.
+        uploaded, saved, or sent anywhere. A loaded transcript replaces the demo sample below until
+        you clear it.
       </p>
 
       <div className="flex items-center gap-2 flex-wrap">
@@ -79,7 +88,7 @@ export default function LocalTranscriptLoader() {
             </span>
             <button
               type="button"
-              onClick={() => setResult(null)}
+              onClick={onClear}
               className="text-[10px] font-mono px-1.5 py-0.5 rounded border border-office-line text-office-muted hover:text-office-text transition"
             >
               Clear
@@ -105,13 +114,6 @@ export default function LocalTranscriptLoader() {
               {")"}
             </span>
           )}
-        </div>
-      )}
-
-      {result?.ok && (
-        <div className="flex flex-col gap-3 mt-1" aria-label="Loaded transcript view">
-          <ObservedBeatTimeline beats={result.beats} />
-          <EvidencePackPanel markdown={result.evidenceMarkdown} />
         </div>
       )}
     </section>
