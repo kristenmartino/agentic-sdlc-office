@@ -24,9 +24,9 @@ import type { WorkItemKind, WorkItemStatus } from "./work-items";
  *   - file paths, worktree paths, GitHub URLs
  *   - MCP server names / inputs, attachment payloads, secrets / tokens
  *
- * Because the model carries no raw strings, the same code path serializes the
- * synthetic sample and the real redacted fixture identically — only the counts
- * differ.
+ * Because the model carries only allowlisted, content-safe strings and counts,
+ * the synthetic sample and real redacted fixture can be serialized through the
+ * same schema and tested with the same forbidden-content probes.
  */
 
 /** Where the pack was generated from. Today only observed sessions. */
@@ -63,15 +63,16 @@ export interface EvidencePackWorkItemSummary {
 }
 
 /**
- * Activity shape, derived entirely from the content-free `VisualBeat` stream
- * (labels/zones/actions/counts), never from event payload text.
+ * Activity shape, derived from the `VisualBeat` stream's allowlisted fields.
+ * Because `beats` is a public input to `buildEvidencePack`, none of these
+ * strings are trusted verbatim: zone/action keys are allowlisted (unknown →
+ * `"other"`) and each `beatSequence` label is REGENERATED from the beat's
+ * `action` + `signalCount` — never from the caller-supplied `beat.label`.
  *
  * `byZone` / `byAction` are **sparse** maps — only zones/actions that actually
- * occurred appear, each with a beat count ≥ 1. Keys are the observed model's
- * zone/action names with one substitution: `thinking` is surfaced as
- * `reasoning` (see the reducer's `probeSafeLabel`) so the serialized pack is
- * provably free of the `thinking` forbidden-content probe. The bare phase label
- * is content-free; the rename only avoids a literal substring collision.
+ * occurred appear, each with a beat count ≥ 1. One substitution: the
+ * content-free `thinking`/`think` phase is surfaced as `reasoning` so the
+ * serialized pack is provably free of the `thinking` forbidden-content probe.
  */
 export interface EvidencePackActivitySummary {
   /** Total events in the resolved stream (lifecycle + activity). */

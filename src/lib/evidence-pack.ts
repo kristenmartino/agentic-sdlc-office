@@ -28,8 +28,15 @@ import { reduceObservedPlayback, type VisualBeat } from "./observed-playback-red
  *   pack is a fresh object. `reduceObservedPlayback` is likewise pure.
  * - **Allowlist only.** The reducer consumes ONLY explicitly content-safe
  *   fields and NEVER reads arbitrary free-text payloads. Concretely it reads:
- *     - `VisualBeat` labels / zones / actions / counts (already content-free by
- *       construction — see the reducer's privacy notes);
+ *     - `VisualBeat` zones / actions / counts — but it does NOT trust them
+ *       verbatim. Because `beats` is a public input, a caller could hand in a
+ *       beat with an unsafe `label` (or a non-enum `zone`/`action`, or a
+ *       non-numeric `signalCount`). So the activity summary REGENERATES every
+ *       beat-derived string from allowlisted fields: labels come from
+ *       `action` + a coerced `signalCount` (never `beat.label`), and zone/action
+ *       keys are allowlisted to the known sets (unknown → `"other"`). Beats from
+ *       `reduceObservedPlayback` are unaffected — they already produce these
+ *       exact values.
  *     - `event.type` (to count gates / blockers / artifacts / messages);
  *     - `event.payload.artifact.kind` (allowlisted) and, *for counting only*,
  *       `…artifact.ref` / `…summary` (to de-dupe edited files and exclude PR
@@ -132,6 +139,33 @@ const KNOWN_ORIGIN_SOURCES: ReadonlySet<string> = new Set([
   "claude-code-local",
   "claude-code-cloud",
   "fixture",
+]);
+
+// The observed model's zones/actions (mirrors `ObservedZone` / `BeatAction`).
+// Used to allowlist caller-supplied beat zone/action keys; anything outside the
+// set collapses to `"other"` so an unsafe beat can't leak a key.
+const KNOWN_OBSERVED_ZONES: ReadonlySet<string> = new Set([
+  "reading",
+  "coding",
+  "testing",
+  "thinking",
+  "human",
+  "outbox",
+  "activity",
+]);
+
+const KNOWN_BEAT_ACTIONS: ReadonlySet<string> = new Set([
+  "read",
+  "edit",
+  "test_run",
+  "test_pass",
+  "test_fail",
+  "think",
+  "human_consulted",
+  "outbox",
+  "compact",
+  "blocked",
+  "note",
 ]);
 
 /** Content categories the pack deliberately omits — surfaced in the footer. */
@@ -238,11 +272,14 @@ function summariseActivity(
   const beatSequence: string[] = [];
 
   for (const beat of beats) {
-    const zone = probeSafeLabel(beat.zone);
-    const action = probeSafeLabel(beat.action);
+    // Beats are a PUBLIC input, so never trust their strings verbatim: derive
+    // the zone/action keys from the allowlist and the label from action +
+    // signalCount — never from `beat.label`.
+    const zone = safeBeatZoneKey(beat.zone);
+    const action = safeBeatActionKey(beat.action);
     byZone[zone] = (byZone[zone] ?? 0) + 1;
     byAction[action] = (byAction[action] ?? 0) + 1;
-    beatSequence.push(probeSafeLabel(beat.label));
+    beatSequence.push(safeEvidenceBeatLabel(beat));
   }
 
   return {
@@ -384,7 +421,7 @@ function deriveReviewerFocus(args: {
 
   const editSignals = beats
     .filter((b) => b.action === "edit")
-    .reduce((n, b) => n + b.signalCount, 0);
+    .reduce((n, b) => n + safeCount(b.signalCount), 0);
   if (editSignals >= HEAVY_EDIT_THRESHOLD) {
     items.push({
       kind: "heavy_editing",
@@ -429,16 +466,67 @@ function looksLikePrArtifact(kind: string, ref: string, summary: string): boolea
 }
 
 /**
- * The observed model's `thinking` zone and `think` action's `thinking` label
- * are the only tokens that collide with the `thinking` forbidden-content probe
- * (which exists to catch raw chain-of-thought). The bare phase word is
- * content-free, so we surface it as `reasoning` rather than drop the beat —
- * keeping the activity summary complete while staying provably free of the
- * substring. Every other zone/action/label passes through unchanged.
+ * Rename the content-free `thinking`/`think` phase to `reasoning`. The bare word
+ * is a phase label, not chain-of-thought, but the literal substring collides
+ * with the `thinking` forbidden-content probe — so we surface it as `reasoning`
+ * to keep the activity signal while staying provably free of the substring.
  */
-function probeSafeLabel(text: string): string {
-  if (text === "thinking" || text === "think") return "reasoning";
-  return text;
+function reasoningRename(token: string): string {
+  return token === "thinking" || token === "think" ? "reasoning" : token;
+}
+
+/** Allowlisted, probe-safe zone key. Unknown (caller-injected) zones → `"other"`. */
+function safeBeatZoneKey(zone: string): string {
+  return KNOWN_OBSERVED_ZONES.has(zone) ? reasoningRename(zone) : "other";
+}
+
+/** Allowlisted, probe-safe action key. Unknown (caller-injected) actions → `"other"`. */
+function safeBeatActionKey(action: string): string {
+  return KNOWN_BEAT_ACTIONS.has(action) ? reasoningRename(action) : "other";
+}
+
+/**
+ * Derive a content-free beat label from allowlisted fields ONLY — `action` and a
+ * coerced `signalCount`. It deliberately ignores `beat.label`: because `beats`
+ * is a public input, a caller could supply a beat whose raw `label` carries
+ * secrets/paths/commands, and the allowlist contract forbids emitting it. Beats
+ * from `reduceObservedPlayback` map to the same strings its own `labelFor`
+ * produces (with `think` surfaced as `reasoning`).
+ */
+function safeEvidenceBeatLabel(beat: VisualBeat): string {
+  const n = safeCount(beat.signalCount);
+  switch (beat.action) {
+    case "read":
+      return n > 1 ? `read ${n} files` : "reading";
+    case "edit":
+      return n > 1 ? `editing intensely (${n} edits)` : "editing";
+    case "test_run":
+      return "running tests";
+    case "test_pass":
+      return "tests passed";
+    case "test_fail":
+      return "tests failed";
+    case "think":
+      return "reasoning";
+    case "human_consulted":
+      return "human consulted";
+    case "outbox":
+      return "opened a PR";
+    case "compact":
+      return "compacted context";
+    case "blocked":
+      return "blocked";
+    case "note":
+      return "activity observed";
+    default:
+      // Unknown/caller-injected action → a safe generic label, never echoed.
+      return "activity observed";
+  }
+}
+
+/** Coerce a (possibly caller-injected) count to a safe non-negative integer. */
+function safeCount(value: number): number {
+  return Number.isFinite(value) ? Math.max(0, Math.trunc(value)) : 0;
 }
 
 function plural(n: number): string {

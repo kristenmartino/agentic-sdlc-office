@@ -10,7 +10,7 @@ import {
   parseClaudeCodeTranscript,
   type ParsedClaudeCodeSession,
 } from "./claude-code-parser";
-import { reduceObservedPlayback } from "./observed-playback-reducer";
+import { reduceObservedPlayback, type VisualBeat } from "./observed-playback-reducer";
 import { OBSERVED_SAMPLE_SESSION } from "@/data/mock-events-observed";
 import type { WorkflowEvent } from "@/types/workflow-events";
 import type { EvidencePack } from "@/types/evidence-pack";
@@ -62,6 +62,26 @@ const chatter = (text: string) => ev("agent.message.sent", { agentId: "mira", me
 /** Build a pack from a custom event stream, reusing the sample's safe metadata. */
 const packFromEvents = (events: WorkflowEvent[]): EvidencePack =>
   buildEvidencePack({ session: syntheticSession(), events });
+
+/**
+ * Build a VisualBeat with arbitrary (possibly UNSAFE) field values, to prove
+ * `buildEvidencePack` never trusts caller-supplied beats. Cast through `unknown`
+ * so a test can inject non-enum zones/actions and non-numeric counts.
+ */
+const rawBeat = (overrides: Record<string, unknown>): VisualBeat =>
+  ({
+    id: "beat_0000",
+    zone: "coding",
+    action: "edit",
+    severity: "info",
+    startTs: "2026-05-27T15:00:00.000Z",
+    endTs: "2026-05-27T15:00:01.000Z",
+    eventCount: 1,
+    signalCount: 1,
+    eventIds: [],
+    label: "editing",
+    ...overrides,
+  }) as unknown as VisualBeat;
 
 const focusKinds = (pack: EvidencePack) => pack.reviewerFocus.map((f) => f.kind);
 
@@ -383,6 +403,66 @@ describe("buildEvidencePack — forbidden content never leaks", () => {
     for (const probe of FORBIDDEN) {
       expect(serialized.includes(probe), `pack leaked: ${probe}`).toBe(false);
     }
+  });
+});
+
+// ─── Caller-supplied beats are never trusted (allowlist contract) ────────────
+
+describe("buildEvidencePack — does not trust caller-supplied beats", () => {
+  it("regenerates the beat label from action/signalCount, ignoring an unsafe beat.label", () => {
+    const pack = buildEvidencePack({
+      session: syntheticSession(),
+      beats: [
+        rawBeat({
+          zone: "coding",
+          action: "edit",
+          signalCount: 1,
+          eventIds: ["evt_real-session_0001"],
+          label: "API_KEY=sk-secret ./deploy.sh",
+        }),
+      ],
+    });
+
+    const serialized = JSON.stringify(pack);
+    expect(serialized).not.toContain("sk-secret");
+    expect(serialized).not.toContain("API_KEY");
+    expect(serialized).not.toContain("deploy.sh");
+    expect(serialized).not.toContain("evt_"); // raw eventIds are never read either
+    // Label comes from action + signalCount, not the caller's label.
+    expect(pack.activity.beatSequence).toEqual(["editing"]);
+    expect(pack.activity.byZone).toEqual({ coding: 1 });
+    expect(pack.activity.byAction).toEqual({ edit: 1 });
+  });
+
+  it("buckets non-enum zone/action keys as 'other' and never echoes them", () => {
+    const pack = buildEvidencePack({
+      session: syntheticSession(),
+      beats: [
+        rawBeat({
+          zone: "ghp_leak-zone",
+          action: "API_KEY=sk-evil",
+          label: "sk-evil-label",
+        }),
+      ],
+    });
+
+    const serialized = JSON.stringify(pack);
+    expect(serialized).not.toContain("ghp_");
+    expect(serialized).not.toContain("sk-evil");
+    expect(serialized).not.toContain("API_KEY");
+    expect(pack.activity.byZone).toEqual({ other: 1 });
+    expect(pack.activity.byAction).toEqual({ other: 1 });
+    expect(pack.activity.beatSequence).toEqual(["activity observed"]);
+  });
+
+  it("coerces a non-numeric signalCount instead of interpolating it into a label", () => {
+    const pack = buildEvidencePack({
+      session: syntheticSession(),
+      beats: [rawBeat({ zone: "reading", action: "read", signalCount: "sk-9 files", label: "x" })],
+    });
+    expect(JSON.stringify(pack)).not.toContain("sk-9");
+    // Coerced to 0 → singular "reading", never "read sk-9 files".
+    expect(pack.activity.beatSequence).toEqual(["reading"]);
   });
 });
 
