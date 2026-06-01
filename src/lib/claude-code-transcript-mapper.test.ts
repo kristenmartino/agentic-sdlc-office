@@ -329,8 +329,11 @@ describe("parseClaudeCodeTranscript — validation errors fail loudly", () => {
   });
 
   it("does not produce a partial session when validation fails", () => {
-    const badJsonl = JSON.stringify({ type: "completely_unknown_type" });
-    expect(() => parseClaudeCodeTranscript(badJsonl)).toThrow();
+    // A malformed KNOWN shape still fails validation loudly. (An unknown line
+    // TYPE is now tolerated/skipped, so it would NOT throw — tolerance is only
+    // for unrecognised types, never for malformed known shapes.)
+    const badJsonl = JSON.stringify({ type: "assistant", message: { role: "assistant", content: "not-an-array" } });
+    expect(() => parseClaudeCodeTranscript(badJsonl)).toThrow(/validation issue/);
   });
 });
 
