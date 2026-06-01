@@ -187,6 +187,40 @@ for both fixtures. The function name matches this plan. Key decision:
   it just formats the pack's own fields and emits the pack's redaction footer
   verbatim. Pure and deterministic (no IO, no `Date.now`, no mutation).
 
+The pack is also surfaced read-only in observed mode (the in-app panel, #71),
+so a human can review the markdown alongside the timeline.
+
+## Reviewer-focus validation (test-only)
+
+The synthetic sample and the real redacted fixture are both *clean* runs, so the
+pack's **Reviewer focus** section reads "No focus signals" — correct, but it
+doesn't prove the section's value. That value shows up when a session has
+something to review. `src/lib/evidence-pack-reviewer-focus.test.ts` drives a
+deliberately risky synthetic stream (a failed quality gate, a blocker, an
+AskUserQuestion touchpoint, heavy editing, a PR) through the real path
+(`buildEvidencePack` → `renderEvidencePackMarkdown`) and asserts the section
+becomes genuinely useful:
+
+```
+## Reviewer focus
+
+- **WARNING** — 1 quality gate failed
+- **WARNING** — 1 blocker raised
+- **NOTE** — heavy editing observed (7 edits)
+- **NOTE** — 1 human touchpoint observed
+```
+
+The same test is adversarial about privacy: each raw payload is stuffed with
+content that must never surface (home paths, a `pnpm test` command, stderr, an
+API key, a GitHub token, a private repo URL, raw model reasoning, raw
+event/gate/blocker ids), and the test asserts none of it appears in the
+serialized pack or the rendered markdown. So a risky session stays just as
+content-safe as a clean one — the focus section gets *useful*, not *leaky*.
+
+**Sequencing:** export / download (#63) should be evaluated only after this
+focus-section behavior is validated — the artifact has to be worth saving before
+a save button is worth building.
+
 ## Related
 
 - [now-next-later-never.md](now-next-later-never.md) — roadmap placement
