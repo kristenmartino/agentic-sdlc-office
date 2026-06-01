@@ -168,7 +168,24 @@ for the renderer PR (#61):
 `buildEvidencePack` takes `{ session, events?, beats?, generatedAt? }`: it
 derives beats via `reduceObservedPlayback` when not supplied, and `generatedAt`
 is injectable (defaulting to the session's `capturedAt`) so the reducer stays
-deterministic with no `Date.now`.
+deterministic with no `Date.now`. A post-review hardening also treats the public
+`beats` override as untrusted: beat labels are regenerated from `action` +
+`signalCount`, zone/action keys are allowlisted (unknown → `"other"`), and
+`signalCount` is coerced — so a caller-supplied beat can't smuggle content in.
+
+## Implementation notes — markdown renderer PR (#61)
+
+Landed in [`src/lib/evidence-pack-markdown.ts`](../../src/lib/evidence-pack-markdown.ts)
+(`renderEvidencePackMarkdown(pack)`), with
+[`src/lib/evidence-pack-markdown.test.ts`](../../src/lib/evidence-pack-markdown.test.ts)
+asserting the section set + the forbidden-content gate over the rendered markdown
+for both fixtures. The function name matches this plan. Key decision:
+
+- **The renderer takes ONLY the `EvidencePack` — never the session/events/beats.**
+  The pack is the content-safe boundary (`buildEvidencePack` enforces the
+  allowlist), so the renderer structurally cannot reach raw transcript content;
+  it just formats the pack's own fields and emits the pack's redaction footer
+  verbatim. Pure and deterministic (no IO, no `Date.now`, no mutation).
 
 ## Related
 
