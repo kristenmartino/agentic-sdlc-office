@@ -132,10 +132,11 @@ export default function Page() {
               <ObservedBeatTimeline beats={observedBeats} />
               <EvidencePackPanel markdown={evidenceMarkdown} />
               <p className="text-[10px] text-office-muted/70 leading-snug px-1">
-                Observed mode renders one real session as an activity timeline, not a
-                multi-agent relay. The 8-room office is the{" "}
-                <span className="text-office-muted">scripted</span> operating model —
-                switch to a scripted scenario to see it.
+                Observed mode renders one transcript-shaped session as an activity
+                timeline, not a multi-agent relay. The 8-room office is the{" "}
+                <span className="text-office-muted">scripted</span> operating model;
+                switch to <span className="font-mono text-office-muted">REQ-014</span>{" "}
+                or <span className="font-mono text-office-muted">BUG-032</span> to see it.
               </p>
             </>
           ) : (
