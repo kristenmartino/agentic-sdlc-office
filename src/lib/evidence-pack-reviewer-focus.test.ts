@@ -160,11 +160,28 @@ describe("Evidence Pack — reviewer focus on a risky session", () => {
   it("rolls up the underlying summaries correctly", () => {
     const pack = riskyPack();
     expect(pack.quality).toMatchObject({ passedCount: 1, failedCount: 1, status: "mixed" });
-    expect(pack.blockers).toEqual({ blockerCount: 1, blockerKinds: ["gate_failed"] });
+    expect(pack.blockers).toEqual({ blockerCount: 1, blockerKinds: ["gate_failed"], blockedStateCount: 1 });
     expect(pack.humanTouchpoints).toEqual({ count: 1, askUserQuestionCount: 1 });
     expect(pack.filesAndArtifacts.prCount).toBe(1);
     expect(pack.filesAndArtifacts.editedFileCount).toBe(1);
     expect(pack.filesAndArtifacts.artifactKinds).toEqual(["code_pr"]);
+  });
+
+  it("surfaces a failed-status block even with NO governance blocker raised (kills the contradiction)", () => {
+    // `status -> failed` produces a `blocked` beat but emits no `blocker.raised`.
+    // The pack must not say "Blockers: None" while a `blocked` beat exists.
+    const pack = buildEvidencePack({
+      session: OBSERVED_SAMPLE_SESSION,
+      events: [status("coding"), status("failed")],
+    });
+    expect(pack.blockers.blockerCount).toBe(0); // no governance blocker raised
+    expect(pack.blockers.blockedStateCount).toBe(1); // but a blocked/failed state occurred
+    expect(pack.reviewerFocus.map((f) => f.kind)).toContain("blocked_state");
+
+    const md = renderEvidencePackMarkdown(pack);
+    const blockers = md.slice(md.indexOf("## Blockers"), md.indexOf("## Human touchpoints"));
+    expect(blockers).not.toContain("None observed"); // the old contradiction is gone
+    expect(blockers).toContain("blocked / failed state");
   });
 
   it("renders a useful Reviewer focus section in the markdown", () => {

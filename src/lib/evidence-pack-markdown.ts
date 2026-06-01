@@ -86,14 +86,19 @@ export function renderEvidencePackMarkdown(pack: EvidencePack): string {
   );
 
   const b = pack.blockers;
-  push(
-    "## Blockers",
-    "",
-    b.blockerCount === 0
-      ? "- None observed."
-      : `- **${b.blockerCount}** raised${b.blockerKinds.length > 0 ? ` (kind${plural(b.blockerKinds.length)}: ${b.blockerKinds.join(", ")})` : ""}.`,
-    "",
-  );
+  const blockerLines: string[] = [];
+  if (b.blockerCount > 0) {
+    blockerLines.push(
+      `- **${b.blockerCount}** raised${b.blockerKinds.length > 0 ? ` (kind${plural(b.blockerKinds.length)}: ${b.blockerKinds.join(", ")})` : ""}.`,
+    );
+  }
+  if (b.blockedStateCount > 0) {
+    blockerLines.push(
+      `- **${b.blockedStateCount}** blocked / failed state${plural(b.blockedStateCount)} in the activity timeline.`,
+    );
+  }
+  if (blockerLines.length === 0) blockerLines.push("- None observed.");
+  push("## Blockers", "", ...blockerLines, "");
 
   const h = pack.humanTouchpoints;
   push(

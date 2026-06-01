@@ -132,7 +132,7 @@ describe("buildEvidencePack — stable object shape", () => {
       "status",
       "totalGates",
     ]);
-    expect(Object.keys(pack.blockers).sort()).toEqual(["blockerCount", "blockerKinds"]);
+    expect(Object.keys(pack.blockers).sort()).toEqual(["blockedStateCount", "blockerCount", "blockerKinds"]);
     expect(Object.keys(pack.humanTouchpoints).sort()).toEqual(["askUserQuestionCount", "count"]);
     expect(Object.keys(pack.redaction).sort()).toEqual(["note", "omitted"]);
     expect(Array.isArray(pack.reviewerFocus)).toBe(true);
@@ -266,7 +266,7 @@ describe("buildEvidencePack — blockers", () => {
   it("is empty for the clean fixtures", () => {
     for (const session of [syntheticSession(), realRedactedSession()]) {
       const pack = buildEvidencePack({ session });
-      expect(pack.blockers).toEqual({ blockerCount: 0, blockerKinds: [] });
+      expect(pack.blockers).toEqual({ blockerCount: 0, blockerKinds: [], blockedStateCount: 0 });
     }
   });
 

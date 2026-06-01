@@ -113,9 +113,18 @@ export interface EvidencePackQualitySummary {
 }
 
 export interface EvidencePackBlockerSummary {
+  /** Explicit governance blockers raised (`blocker.raised` events). */
   blockerCount: number;
   /** Distinct allowlisted blocker kinds (never raw descriptions). */
   blockerKinds: string[];
+  /**
+   * Blocked/failed states observed in the activity timeline (beats with the
+   * `blocked` action — e.g. the agent entering a `failed` status). Distinct
+   * from `blockerCount`: a session can hit a blocked/failed state without an
+   * explicit governance blocker ever being raised. Tracked so the pack can't
+   * say "no blockers" while the timeline shows a `blocked` beat.
+   */
+  blockedStateCount: number;
 }
 
 export interface EvidencePackHumanTouchpointSummary {
@@ -136,6 +145,7 @@ export interface EvidencePackHumanTouchpointSummary {
 export type EvidencePackReviewerFocusKind =
   | "failed_checks"
   | "blockers_present"
+  | "blocked_state"
   | "heavy_editing"
   | "no_tests_observed"
   | "human_touchpoint";
