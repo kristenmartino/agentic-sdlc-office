@@ -119,9 +119,10 @@ export default function ObservedBeatTimeline({
               }`}
             >
               {b.label}
-              {b.eventCount > 1 && (
-                <span className="ml-1 font-mono opacity-60">×{b.eventCount}</span>
-              )}
+              {/* No ×{eventCount} badge here: it's the fold count (incl. attached
+                  chatter), which read as a count of the action itself — e.g.
+                  "opened a PR ×25". The fold/signal counts live in the drill-down
+                  detail panel, where they're labelled honestly. */}
             </button>
             {i < view.sequence.length - 1 && (
               <span className="text-[10px] text-office-muted/40" aria-hidden>
