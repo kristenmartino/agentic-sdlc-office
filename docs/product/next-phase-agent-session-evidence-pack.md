@@ -219,7 +219,18 @@ content-safe as a clean one — the focus section gets *useful*, not *leaky*.
 
 **Sequencing:** export / download (#63) should be evaluated only after this
 focus-section behavior is validated — the artifact has to be worth saving before
-a save button is worth building.
+a save button is worth building. That validation passed, so export landed next.
+
+## Implementation notes — export / download (#63)
+
+A "↓ .md" button on the observed-mode panel downloads the pack as
+`agent-session-evidence-pack.md` (`src/components/observed/evidence-pack-download.ts`).
+It stays inside the same privacy boundary: the export receives ONLY the
+already-rendered markdown string — never the session, events, or beats — and
+passes it through verbatim under a fixed, content-safe filename. Pure descriptor
+(`buildEvidencePackBlobParts`) is node-tested; `downloadEvidencePackMarkdown` is
+a thin browser trigger that no-ops off the DOM (SSR/tests). Still no file loader,
+clipboard, GitHub writes, or network — just the browser file API.
 
 ## Related
 
