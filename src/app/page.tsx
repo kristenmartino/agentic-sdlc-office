@@ -12,9 +12,7 @@ import DecisionInbox from "@/components/decisions/DecisionInbox";
 import ActivityLog from "@/components/activity/ActivityLog";
 import AgentDrawer from "@/components/drawers/AgentDrawer";
 import WorkItemDrawer from "@/components/drawers/WorkItemDrawer";
-import ObservedBeatTimeline from "@/components/observed/ObservedBeatTimeline";
-import EvidencePackPanel from "@/components/observed/EvidencePackPanel";
-import LocalTranscriptLoader from "@/components/observed/LocalTranscriptLoader";
+import ObservedStage from "@/components/observed/ObservedStage";
 import { selectEvidencePackMarkdown } from "@/components/observed/evidence-pack-panel-view";
 import { reduceObservedPlayback } from "@/lib/observed-playback-reducer";
 
@@ -129,12 +127,10 @@ export default function Page() {
               {/* Observed mode: the beat timeline IS the stage. The 8-room
                   relay office is the scripted operating model and would render
                   mostly-dead for a real single-agent session, so it's hidden
-                  here rather than shown half-empty. */}
-              {/* Local, read-only transcript import (#65). Load your own
-                  session; the bundled sample below stays as the demo. */}
-              <LocalTranscriptLoader />
-              <ObservedBeatTimeline beats={observedBeats} />
-              <EvidencePackPanel markdown={evidenceMarkdown} />
+                  here rather than shown half-empty. ObservedStage shows the
+                  bundled sample by default and swaps to a loaded local
+                  transcript (#65/#66) when one is imported. */}
+              <ObservedStage sampleBeats={observedBeats} sampleMarkdown={evidenceMarkdown} />
               <p className="text-[10px] text-office-muted/70 leading-snug px-1">
                 Observed mode renders one transcript-shaped session as an activity
                 timeline, not a multi-agent relay. The 8-room office is the{" "}
