@@ -144,6 +144,32 @@ Pure logic + docs. **No UI, no file loader, no downloads, no GitHub writes.**
 4. Tests against synthetic + real redacted fixture.
 5. *Then* maybe the local file loader.
 
+## Implementation notes — model + reducer PR (#59, #60)
+
+Landed in [`src/types/evidence-pack.ts`](../../src/types/evidence-pack.ts) (the
+typed `EvidencePack` model) and [`src/lib/evidence-pack.ts`](../../src/lib/evidence-pack.ts)
+(the pure `buildEvidencePack(input)` reducer), with
+[`src/lib/evidence-pack.test.ts`](../../src/lib/evidence-pack.test.ts) asserting
+the contract against both the synthetic sample and the real redacted fixture.
+Type/function names match this plan; two privacy decisions are worth calling out
+for the renderer PR (#61):
+
+- **Work-item title is never exposed.** The mapper seeds `workItem.title` from
+  the raw user prompt, and an arbitrary prompt can't be proven content-safe, so
+  the pack always uses a constant fallback (`"Observed session"`). The reducer
+  doesn't read the raw title at all.
+- **`thinking` → `reasoning` in the activity summary.** The observed model's
+  `thinking` zone and the `think` action's `"thinking"` label are content-free,
+  but the literal substring collides with the `thinking` forbidden-content probe
+  (which exists to catch raw chain-of-thought). The reducer surfaces that phase
+  as `reasoning` so the serialized pack is *provably* free of the substring
+  without dropping the beat. Every other zone/action/label passes through as-is.
+
+`buildEvidencePack` takes `{ session, events?, beats?, generatedAt? }`: it
+derives beats via `reduceObservedPlayback` when not supplied, and `generatedAt`
+is injectable (defaulting to the session's `capturedAt`) so the reducer stays
+deterministic with no `Date.now`.
+
 ## Related
 
 - [now-next-later-never.md](now-next-later-never.md) — roadmap placement
