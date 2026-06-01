@@ -14,6 +14,7 @@ import AgentDrawer from "@/components/drawers/AgentDrawer";
 import WorkItemDrawer from "@/components/drawers/WorkItemDrawer";
 import ObservedBeatTimeline from "@/components/observed/ObservedBeatTimeline";
 import EvidencePackPanel from "@/components/observed/EvidencePackPanel";
+import LocalTranscriptLoader from "@/components/observed/LocalTranscriptLoader";
 import { selectEvidencePackMarkdown } from "@/components/observed/evidence-pack-panel-view";
 import { reduceObservedPlayback } from "@/lib/observed-playback-reducer";
 
@@ -129,6 +130,9 @@ export default function Page() {
                   relay office is the scripted operating model and would render
                   mostly-dead for a real single-agent session, so it's hidden
                   here rather than shown half-empty. */}
+              {/* Local, read-only transcript import (#65). Load your own
+                  session; the bundled sample below stays as the demo. */}
+              <LocalTranscriptLoader />
               <ObservedBeatTimeline beats={observedBeats} />
               <EvidencePackPanel markdown={evidenceMarkdown} />
               <p className="text-[10px] text-office-muted/70 leading-snug px-1">

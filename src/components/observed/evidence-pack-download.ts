@@ -52,14 +52,15 @@ export function downloadEvidencePackMarkdown(markdown: string | null | undefined
 
   const { filename, type, content } = buildEvidencePackBlobParts(markdown);
   const url = URL.createObjectURL(new Blob([content], { type }));
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
   try {
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = filename;
-    document.body.appendChild(anchor);
     anchor.click();
-    anchor.remove();
   } finally {
+    // Clean up even if click() throws, so we never leak the anchor or the URL.
+    anchor.remove();
     URL.revokeObjectURL(url);
   }
 }
