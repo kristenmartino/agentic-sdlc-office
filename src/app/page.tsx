@@ -13,6 +13,8 @@ import ActivityLog from "@/components/activity/ActivityLog";
 import AgentDrawer from "@/components/drawers/AgentDrawer";
 import WorkItemDrawer from "@/components/drawers/WorkItemDrawer";
 import ObservedBeatTimeline from "@/components/observed/ObservedBeatTimeline";
+import EvidencePackPanel from "@/components/observed/EvidencePackPanel";
+import { selectEvidencePackMarkdown } from "@/components/observed/evidence-pack-panel-view";
 import { reduceObservedPlayback } from "@/lib/observed-playback-reducer";
 
 export default function Page() {
@@ -29,6 +31,10 @@ export default function Page() {
   // Render spike: for observed mode, reduce the replayed event log into
   // VisualBeats so the timeline forms live as playback advances.
   const observedBeats = useMemo(() => reduceObservedPlayback(log), [log]);
+  // The read-only Evidence Pack markdown for observed scenarios (null otherwise).
+  // Built from the full loaded session, so it's a stable review artifact that
+  // complements the live, playback-driven timeline above it.
+  const evidenceMarkdown = useMemo(() => selectEvidencePackMarkdown(scenario), [scenario]);
   const isIncident = scenario.kind === "bug";
   const isObserved = scenario.source === "observed";
   const runHasStarted = log.length > 0;
@@ -124,6 +130,7 @@ export default function Page() {
                   mostly-dead for a real single-agent session, so it's hidden
                   here rather than shown half-empty. */}
               <ObservedBeatTimeline beats={observedBeats} />
+              <EvidencePackPanel markdown={evidenceMarkdown} />
               <p className="text-[10px] text-office-muted/70 leading-snug px-1">
                 Observed mode renders one real session as an activity timeline, not a
                 multi-agent relay. The 8-room office is the{" "}
