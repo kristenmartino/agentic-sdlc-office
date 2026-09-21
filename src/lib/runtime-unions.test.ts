@@ -57,21 +57,23 @@ describe("KNOWN_* sets", () => {
     expect(KNOWN_WORKFLOW_EVENT_TYPES.size).toBe(31);
   });
 
-  it("KNOWN_RAW_TRANSCRIPT_LINE_TYPES covers the 10 line types real Claude Code sessions use", () => {
-    // 4 originals + 6 added after the real-transcript discovery (PR #44).
-    expect(KNOWN_RAW_TRANSCRIPT_LINE_TYPES.size).toBe(10);
+  it("KNOWN_RAW_TRANSCRIPT_LINE_TYPES covers the line types real Claude Code sessions use", () => {
+    // 4 originals + 6 added after the real-transcript discovery (PR #44) + `mode`
+    // (added after real-transcript dogfooding).
+    expect(KNOWN_RAW_TRANSCRIPT_LINE_TYPES.size).toBe(11);
     const expected = [
       "system", "user", "assistant", "summary",
       "ai-title", "custom-title", "last-prompt", "pr-link", "attachment", "queue-operation",
+      "mode",
     ] as const;
     for (const t of expected) {
       expect(KNOWN_RAW_TRANSCRIPT_LINE_TYPES.has(t)).toBe(true);
     }
   });
 
-  it("KNOWN_CONTENT_BLOCK_TYPES covers text/tool_use/tool_result/thinking", () => {
-    expect(KNOWN_CONTENT_BLOCK_TYPES.size).toBe(4);
-    for (const t of ["text", "tool_use", "tool_result", "thinking"] as const) {
+  it("KNOWN_CONTENT_BLOCK_TYPES covers text/tool_use/tool_result/thinking + image/tool_reference", () => {
+    expect(KNOWN_CONTENT_BLOCK_TYPES.size).toBe(6);
+    for (const t of ["text", "tool_use", "tool_result", "thinking", "image", "tool_reference"] as const) {
       expect(KNOWN_CONTENT_BLOCK_TYPES.has(t)).toBe(true);
     }
   });

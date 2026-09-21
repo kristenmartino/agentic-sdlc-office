@@ -101,9 +101,8 @@ describe("validateRawTranscript", () => {
     expect(issues, JSON.stringify(issues, null, 2)).toEqual([]);
   });
 
-  it("flags unknown line.type values", () => {
-    const issues = validate('{"type":"meta"}');
-    expect(issues.some((i) => i.field === "type" && i.message.includes("unknown line.type: 'meta'"))).toBe(true);
+  it("tolerates unknown line types (format evolution) — skipped, not failed", () => {
+    expect(validate('{"type":"meta_future_kind"}')).toEqual([]);
   });
 
   it("flags a user message missing the message object", () => {
@@ -121,11 +120,10 @@ describe("validateRawTranscript", () => {
     expect(issues.some((i) => i.field === "message.content" && i.message.includes("expected array"))).toBe(true);
   });
 
-  it("flags an unknown content block type", () => {
-    const issues = validate(
+  it("tolerates unknown content block types — skipped, not failed", () => {
+    expect(validate(
       '{"type":"assistant","message":{"role":"assistant","content":[{"type":"voice","data":"x"}]}}',
-    );
-    expect(issues.some((i) => i.field === "message.content[0].type" && i.message.includes("unknown content block type: 'voice'"))).toBe(true);
+    )).toEqual([]);
   });
 
   it("flags a tool_use missing id", () => {
@@ -198,16 +196,20 @@ describe("validateRawTranscript", () => {
     expect(issues).toEqual([]);
   });
 
-  it("validates nested content blocks inside a tool_result content array", () => {
+  it("still validates nested KNOWN content blocks inside a tool_result content array", () => {
+    // A nested KNOWN block with a bad shape is still flagged (a nested UNKNOWN
+    // type would be tolerated/skipped — tolerance is for unknown types only).
     const issues = validate(
-      '{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t1","content":[{"type":"voice"}]}]}}',
+      '{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t1","content":[{"type":"text"}]}]}}',
     );
-    expect(issues.some((i) => i.field === "message.content[0].content[0].type" && i.message.includes("unknown content block type: 'voice'"))).toBe(true);
+    expect(issues.some((i) => i.field === "message.content[0].content[0].text" && i.message.includes("'text' field"))).toBe(true);
   });
 
   it("reports the 1-based lineIndex of the offending line", () => {
     const issues: RawTranscriptIssue[] = [];
-    validateRawTranscriptLine({ type: "meta" }, 7, issues);
+    // A KNOWN type with a malformed shape (user line missing its message object).
+    validateRawTranscriptLine({ type: "user" }, 7, issues);
+    expect(issues.length).toBeGreaterThan(0);
     expect(issues[0].lineIndex).toBe(7);
   });
 
@@ -338,5 +340,57 @@ describe("validateRawTranscript — additive envelope fields", () => {
       message: { role: "user", content: "hello" },
     });
     expect(validateRawTranscript(parseRawTranscript(jsonl))).toEqual([]);
+  });
+});
+
+describe("validateRawTranscript — tolerance + real-format tokens (dogfooding)", () => {
+  function validate(jsonl: string): RawTranscriptIssue[] {
+    return validateRawTranscript(parseRawTranscript(jsonl));
+  }
+
+  it("accepts a 'mode' (permission-change) line", () => {
+    expect(validate(
+      '{"type":"mode","mode":"acceptEdits","sessionId":"s1","timestamp":"2026-06-01T12:00:00.000Z"}',
+    )).toEqual([]);
+  });
+
+  it("accepts an 'image' content block", () => {
+    expect(validate(
+      '{"type":"user","message":{"role":"user","content":[{"type":"image","source":{"type":"base64","data":"AAAA"}}]}}',
+    )).toEqual([]);
+  });
+
+  it("accepts a 'tool_reference' content block", () => {
+    expect(validate(
+      '{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_reference","name":"Read"}]}}',
+    )).toEqual([]);
+  });
+
+  it("tolerates a not-yet-modelled future line type (no fail)", () => {
+    expect(validate('{"type":"some_future_2027_kind","whatever":true}')).toEqual([]);
+  });
+
+  it("tolerates a not-yet-modelled future content block type (no fail)", () => {
+    expect(validate(
+      '{"type":"assistant","message":{"role":"assistant","content":[{"type":"future_block","x":1}]}}',
+    )).toEqual([]);
+  });
+
+  it("still flags a malformed KNOWN shape — tolerance is for unknown TYPES only", () => {
+    const issues = validate(
+      '{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","name":"Read","input":{}}]}}',
+    );
+    expect(issues.some((i) => i.field === "message.content[0].id")).toBe(true);
+  });
+
+  it("accepts a real-format-shaped mix (mode + image + tool_reference + valid turns)", () => {
+    const jsonl = [
+      '{"type":"system","subtype":"init","sessionId":"s1"}',
+      '{"type":"mode","mode":"plan","sessionId":"s1"}',
+      '{"type":"user","message":{"role":"user","content":"refactor it"}}',
+      '{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_reference","name":"Edit"},{"type":"text","text":"on it"}]}}',
+      '{"type":"user","message":{"role":"user","content":[{"type":"image","source":{"type":"base64","data":"AAAA"}}]}}',
+    ].join("\n");
+    expect(validate(jsonl)).toEqual([]);
   });
 });

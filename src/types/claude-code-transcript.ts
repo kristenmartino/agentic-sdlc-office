@@ -28,7 +28,13 @@
  * match.
  */
 
-export type ContentBlock = TextBlock | ToolUseBlock | ToolResultBlock | ThinkingBlock;
+export type ContentBlock =
+  | TextBlock
+  | ToolUseBlock
+  | ToolResultBlock
+  | ThinkingBlock
+  | ImageBlock
+  | ToolReferenceBlock;
 
 export interface TextBlock {
   type: "text";
@@ -65,6 +71,24 @@ export interface ToolResultBlock {
 export interface ThinkingBlock {
   type: "thinking";
   thinking: string;
+}
+
+/**
+ * Image content block — e.g. a pasted screenshot. Real transcripts include
+ * these; the mapper never renders block content (privacy), so it is modelled
+ * permissively here and ignored. Any payload fields (source/data/…) exist at
+ * runtime but are never read.
+ */
+export interface ImageBlock {
+  type: "image";
+}
+
+/**
+ * Tool-reference content block — a newer Claude Code feature (an @-reference to
+ * a tool). Ignored by the mapper; modelled permissively, content never read.
+ */
+export interface ToolReferenceBlock {
+  type: "tool_reference";
 }
 
 interface RawTranscriptLineBase {
@@ -211,6 +235,16 @@ export interface RawQueueOperationLine extends RawTranscriptLineBase {
   content?: unknown;
 }
 
+/**
+ * Records a permission/mode change mid-session (e.g. default ↔ acceptEdits ↔
+ * plan). Common in real transcripts but not in the original spike fixtures.
+ * Log-only: the mapper ignores it and renders nothing from it. Modelled
+ * permissively — the exact shape varies and may evolve.
+ */
+export interface RawModeLine extends RawTranscriptLineBase {
+  type: "mode";
+}
+
 export type RawTranscriptLine =
   | RawUserMessage
   | RawAssistantMessage
@@ -221,4 +255,5 @@ export type RawTranscriptLine =
   | RawLastPromptLine
   | RawPrLinkLine
   | RawAttachmentLine
-  | RawQueueOperationLine;
+  | RawQueueOperationLine
+  | RawModeLine;

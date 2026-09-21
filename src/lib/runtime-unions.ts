@@ -83,10 +83,14 @@ export const KNOWN_RAW_TRANSCRIPT_LINE_TYPES: ReadonlySet<RawTranscriptLine["typ
   "system", "user", "assistant", "summary",
   // Added after real-transcript discovery (PR #44):
   "ai-title", "custom-title", "last-prompt", "pr-link", "attachment", "queue-operation",
+  // Added after real-transcript dogfooding: permission/mode-change lines.
+  "mode",
 ]);
 
 export const KNOWN_CONTENT_BLOCK_TYPES: ReadonlySet<ContentBlock["type"]> = new Set([
   "text", "tool_use", "tool_result", "thinking",
+  // Added after real-transcript dogfooding: pasted images and tool @-references.
+  "image", "tool_reference",
 ]);
 
 /**

@@ -121,20 +121,47 @@ describe("parseLocalTranscriptToObservedView — untrusted input stays safe", ()
     expect(serialized).not.toContain("NOPE"); // the echoed field value must not surface
   });
 
-  it("unknown line type → safe error, value not echoed", () => {
+  it("tolerates an unknown line type and never surfaces its content", () => {
+    // Under tolerant parsing an unrecognised line type is SKIPPED, not mapped —
+    // so a spicy unknown line neither fails the import nor leaks (ok or not).
     const result = parseLocalTranscriptToObservedView(
-      JSON.stringify({ type: "totally-bogus-type", smuggled: "sk-secret /Users/x" }),
+      JSON.stringify({ type: "totally-bogus-type", smuggled: "API_KEY=sk-secret at /Users/x (ghp_tok)" }),
     );
-    expectError(result);
     const serialized = JSON.stringify(result);
     expect(serialized).not.toContain("totally-bogus-type");
     expect(serialized).not.toContain("sk-secret");
+    expect(serialized).not.toContain("API_KEY");
     expect(serialized).not.toContain("/Users/");
+    expect(serialized).not.toContain("ghp_");
   });
 
   it("empty input → safe error", () => {
     const result = parseLocalTranscriptToObservedView("   \n  \n");
     expectError(result);
     expect(result.message).toContain("No transcript lines");
+  });
+});
+
+// ─── Real-format tokens now load (the dogfooding fix) ────────────────────────
+
+describe("parseLocalTranscriptToObservedView — real-format tokens load end-to-end", () => {
+  it("accepts a transcript containing mode / image / tool_reference tokens", () => {
+    const jsonl = [
+      '{"type":"system","subtype":"init","sessionId":"s1","timestamp":"2026-06-01T12:00:00.000Z"}',
+      '{"type":"mode","mode":"plan","sessionId":"s1"}',
+      '{"type":"user","message":{"role":"user","content":"refactor the thing"},"uuid":"u1"}',
+      '{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_reference","name":"Edit"},{"type":"tool_use","id":"t1","name":"Edit","input":{"file_path":"/x/a.ts"}}]},"uuid":"u2"}',
+      '{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t1","content":"ok"},{"type":"image","source":{"type":"base64","data":"AAAA"}}]},"uuid":"u3","toolUseResult":{"filePath":"/x/a.ts","structuredPatch":[]}}',
+    ].join("\n");
+    const result = parseLocalTranscriptToObservedView(jsonl);
+    expect(result.ok, JSON.stringify(result)).toBe(true);
+    if (!result.ok) return;
+    expect(result.beats.length).toBeGreaterThan(0);
+    expect(result.evidenceMarkdown).toContain("# Agent Session Evidence Pack");
+    // And it still leaks nothing through the renderable surfaces.
+    const renderable = JSON.stringify(buildTimelineView(result.beats)) + "\n" + result.evidenceMarkdown;
+    for (const probe of FORBIDDEN) {
+      expect(renderable.includes(probe), `loaded view leaked: ${probe}`).toBe(false);
+    }
   });
 });

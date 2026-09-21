@@ -141,11 +141,16 @@ export function validateRawTranscriptLine(
   const obj = line as Record<string, unknown>;
   const type = obj.type;
 
-  if (
-    typeof type !== "string" ||
-    !KNOWN_RAW_TRANSCRIPT_LINE_TYPES.has(type as RawTranscriptLine["type"])
-  ) {
-    push("type", `unknown line.type: '${String(type)}'`);
+  if (typeof type !== "string") {
+    push("type", `line.type must be a string (got ${typeof type})`);
+    return;
+  }
+  if (!KNOWN_RAW_TRANSCRIPT_LINE_TYPES.has(type as RawTranscriptLine["type"])) {
+    // Tolerant by design: an unrecognised but well-formed line type is format
+    // evolution, not corruption — Claude Code keeps adding line kinds (e.g.
+    // `mode`) and the mapper ignores any it doesn't handle. Skip it rather than
+    // failing the whole transcript. (Malformed shapes of KNOWN types are still
+    // flagged below.)
     return;
   }
 
@@ -171,6 +176,9 @@ export function validateRawTranscriptLine(
       break;
     case "system":
       // System lines are intentionally permissive — they carry arbitrary metadata.
+      break;
+    case "mode":
+      // Permission/mode-change line — permissive, log-only (the mapper ignores it).
       break;
     case "ai-title":
       if (typeof obj.aiTitle !== "string") {
@@ -267,8 +275,14 @@ function validateContentBlock(
   }
   const b = block as Record<string, unknown>;
   const t = b.type;
-  if (typeof t !== "string" || !KNOWN_CONTENT_BLOCK_TYPES.has(t as ContentBlock["type"])) {
-    push(`${path}.type`, `unknown content block type: '${String(t)}'`);
+  if (typeof t !== "string") {
+    push(`${path}.type`, `content block 'type' must be a string (got ${typeof t})`);
+    return;
+  }
+  if (!KNOWN_CONTENT_BLOCK_TYPES.has(t as ContentBlock["type"])) {
+    // Tolerant by design: an unrecognised block type is skipped, not fatal — the
+    // mapper never renders non-text/tool blocks anyway. (Malformed shapes of
+    // KNOWN block types are still flagged below.)
     return;
   }
   switch (t) {
@@ -307,6 +321,10 @@ function validateContentBlock(
       if (typeof b.thinking !== "string") {
         push(`${path}.thinking`, `thinking block requires string 'thinking' field`);
       }
+      break;
+    case "image":
+    case "tool_reference":
+      // Permissive — these carry no fields the mapper reads or renders.
       break;
   }
 }
