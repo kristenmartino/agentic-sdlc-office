@@ -201,7 +201,7 @@ export function buildEvidencePack(input: BuildEvidencePackInput): EvidencePack {
   const activity = summariseActivity(events, beats);
   const filesAndArtifacts = summariseArtifacts(events, beats);
   const quality = summariseQuality(events);
-  const blockers = summariseBlockers(events);
+  const blockers = summariseBlockers(events, beats);
   const humanTouchpoints = summariseHumanTouchpoints(events, beats);
   const reviewerFocus = deriveReviewerFocus({ quality, blockers, humanTouchpoints, beats });
 
@@ -346,7 +346,10 @@ function summariseQuality(events: WorkflowEvent[]): EvidencePackQualitySummary {
   return { passedCount, failedCount, totalGates, status };
 }
 
-function summariseBlockers(events: WorkflowEvent[]): EvidencePackBlockerSummary {
+function summariseBlockers(
+  events: WorkflowEvent[],
+  beats: VisualBeat[],
+): EvidencePackBlockerSummary {
   const kinds = new Set<string>();
   let blockerCount = 0;
   for (const event of events) {
@@ -358,7 +361,11 @@ function summariseBlockers(events: WorkflowEvent[]): EvidencePackBlockerSummary 
       typeof rawKind === "string" && KNOWN_BLOCKER_KINDS.has(rawKind) ? rawKind : "other",
     );
   }
-  return { blockerCount, blockerKinds: [...kinds].sort() };
+  // `blocked` beats include both `blocker.raised` and `failed`-status stalls, so
+  // the pack acknowledges a blocked/failed state even when no governance blocker
+  // was raised — otherwise "Blockers: none" contradicts a `blocked` activity beat.
+  const blockedStateCount = beats.filter((b) => b.action === "blocked").length;
+  return { blockerCount, blockerKinds: [...kinds].sort(), blockedStateCount };
 }
 
 function summariseHumanTouchpoints(
@@ -406,6 +413,17 @@ function deriveReviewerFocus(args: {
       kind: "blockers_present",
       severity: "warning",
       detail: `${blockers.blockerCount} blocker${plural(blockers.blockerCount)} raised`,
+    });
+  }
+
+  // A blocked/failed state in the timeline is a "look here" even when no
+  // governance blocker was raised (e.g. the agent hit a failed status after a
+  // gate failed). This is the moment a clean-run pack would otherwise miss.
+  if (blockers.blockedStateCount > 0) {
+    items.push({
+      kind: "blocked_state",
+      severity: "warning",
+      detail: `agent hit a blocked/failed state (${blockers.blockedStateCount}×)`,
     });
   }
 
